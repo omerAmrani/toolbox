@@ -1,0 +1,28 @@
+{
+  "name": "@toolbox/open-uni-recorder-api",
+  "version": "1.0.0",
+  "description": "Open University Summarizer — API",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "install:whisper-cpp": "npx nodejs-whisper download",
+    "install:playwright": "npx playwright install chromium"
+  },
+"dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
+    "@google/generative-ai": "^0.21.0",
+    "better-sqlite3": "^12.10.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "groq-sdk": "^1.1.2",
+    "marked": "^18.0.4",
+    "node-cron": "^4.2.1",
+    "nodejs-whisper": "latest",
+    "nodemailer": "^8.0.7",
+    "ollama": "^0.6.3",
+    "openai-whisper-js": "latest",
+    "playwright": "^1.59.1"
+  }
+}
