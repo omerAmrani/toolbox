@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>הרצאה — האוניברסיטה הפתוחה</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked@13/marked.min.js"></script>
+  <link rel="stylesheet" href="/shared.css">
+  <link rel="stylesheet" href="/lecture.css">
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/classes" class="active">הקורסים שלי</a>
+    <a href="/settings">הגדרות</a>
+  </nav>
+  <div class="header-inner">
+    <a class="back" id="backLink" href="/classes">← חזרה לקורס</a>
+    <h1 id="headerTitle">טוען...</h1>
+    <p id="headerDate"></p>
+  </div>
+</header>
+
+<main>
+  <!-- Summary column -->
+  <div>
+    <div class="card">
+      <div class="summary-header">
+        <div class="summary-title-group">
+          <h2>📝 סיכום</h2>
+          <span class="streaming-badge" id="streamingBadge" style="display:none"><span class="dot"></span>מסכם...</span>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-outline" id="copyBtn" onclick="copyToClipboard()">העתק</button>
+          <button class="btn btn-outline" onclick="downloadMd()">הורד .md</button>
+        </div>
+      </div>
+      <div id="summaryContent">
+        <div class="no-summary">
+          <p>אין סיכום עדיין</p>
+          <button class="btn" onclick="runSummarize()">▶ סכם עכשיו</button>
+        </div>
+      </div>
+
+      <!-- Summary history collapsible -->
+      <div class="transcript-toggle" onclick="toggleHistory()">
+        <span class="transcript-arrow" id="historyArrow">▼</span>
+        <span>היסטוריית סיכומים</span>
+        <span id="historyCount" style="margin-right:auto;font-size:0.75rem;color:var(--muted);font-weight:400"></span>
+      </div>
+      <div id="historyBody" style="display:none">
+        <div id="historyList"></div>
+      </div>
+
+      <!-- Transcript collapsible -->
+      <div class="transcript-toggle" onclick="toggleTranscript()">
+        <span class="transcript-arrow" id="transcriptArrow">▼</span>
+        <span>תמלול מלא</span>
+      </div>
+      <div id="transcriptBody" class="transcript-body" style="display:none">טוען תמלול...</div>
+
+      <!-- Q&A collapsible -->
+      <div class="transcript-toggle" id="qaToggle" style="display:none" onclick="toggleQA()">
+        <span class="transcript-arrow" id="qaArrow">▼</span>
+        <span>🧠 שאלות ותשובות</span>
+      </div>
+      <div id="qaBody" style="display:none;padding:16px 0">
+        <div id="qaContent"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="card">
+      <div class="card-title">פרטים</div>
+      <div class="meta-item">
+        <div class="meta-label">סטטוס</div>
+        <div class="meta-value" id="metaStatus">—</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">תאריך הרצאה</div>
+        <div class="meta-value" id="metaDate">—</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">תמלול</div>
+        <div class="meta-value" id="metaWhisper">—</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">סיכום</div>
+        <div class="meta-value" id="metaSummarize">—</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">תאריך סיכום</div>
+        <div class="meta-value" id="metaSummarizedAt">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">פעולות</div>
+      <div class="action-stack">
+        <div>
+          <label class="field-label">מודל AI</label>
+          <select id="modelSelect" class="select-field select-field--full">
+            <option value="gemini">Gemini (Google)</option>
+            <option value="groq">Groq (LLaMA)</option>
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="ollama">Ollama (מקומי)</option>
+          </select>
+        </div>
+        <button class="btn" id="actionSummarize" onclick="runSummarize()">🔄 סכם מחדש</button>
+        <button class="btn btn-outline" id="actionRetranscribe" onclick="runRetranscribe()">🔄 תמלל מחדש</button>
+        <button class="btn btn-outline" id="actionRetranscribeTest" onclick="runRetranscribe(true)">🧪 תמלל 30 דקות (בדיקה)</button>
+        <button class="btn btn-danger" id="actionStop" style="display:none" onclick="stopJob()">⏹ עצור</button>
+        <hr class="action-divider">
+        <button class="btn btn-danger" onclick="deleteLecture()">🗑 מחק הרצאה</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Progress overlay -->
+<div class="progress-overlay" id="progressOverlay">
+  <div class="progress-box">
+    <h3 id="progressTitle">מסכם...</h3>
+    <div class="progress-steps">
+      <div class="p-step" id="ps-login"><div class="p-bubble">🔐</div><span class="p-label">כניסה</span></div>
+      <div class="p-step" id="ps-download"><div class="p-bubble">⬇️</div><span class="p-label">הורדה</span></div>
+      <div class="p-step" id="ps-transcribe"><div class="p-bubble">🎙️</div><span class="p-label">תמלול</span></div>
+      <div class="p-step" id="ps-summarize"><div class="p-bubble">🤖</div><span class="p-label">סיכום</span></div>
+    </div>
+    <div class="progress-msg">
+      <div class="spinner"></div>
+      <span id="progressMsg">מתחיל...</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/status.js"></script>
+<script>
+  const parts = location.pathname.split('/');
+  const classId = parts[2];
+  const lectureId = parts[4];
+  const STEPS = ['login', 'download', 'transcribe', 'summarize'];
+  let rawSummary = '';
+  let transcriptOpen = false;
+  let historyOpen = false;
+  let streamBuffer = '';
+  let renderScheduled = false;
+  let currentSummaryId = null;
+  let jobActive = false;
+  let currentJobType = null;
+
+  function setJobActive(active, type = null) {
+    jobActive = active;
+    currentJobType = active ? type : null;
+    document.getElementById('actionStop').style.display = active ? 'block' : 'none';
+  }
+
+  async function stopJob() {
+    if (!currentJobType) return;
+    const btn = document.getElementById('actionStop');
+    btn.disabled = true;
+    btn.textContent = 'מבטל...';
+    try {
+      await fetch(`/api/classes/${classId}/lectures/${lectureId}/abort`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: currentJobType }),
+      });
+    } catch {}
+  }
+
+  document.getElementById('backLink').href = `/classes/${classId}`;
+
+  async function loadLecture() {
+    const lecture = await fetch(`/api/classes/${classId}/lectures/${lectureId}/status`).then(r => r.json()).catch(() => null);
+    if (!lecture || lecture.error) { document.getElementById('headerTitle').textContent = 'הרצאה לא נמצאה'; return; }
+
+    document.title = `${lecture.name} — האוניברסיטה הפתוחה`;
+    document.getElementById('headerTitle').textContent = lecture.name;
+    if (lecture.lectureDate) {
+      document.getElementById('headerDate').textContent = new Date(lecture.lectureDate).toLocaleDateString('he-IL');
+    }
+
+    const statusEl = document.getElementById('metaStatus');
+    statusEl.innerHTML = `<span class="badge ${STATUS_CLASS[lecture.status] || 'badge-pending'}">${STATUS_LABEL[lecture.status] || lecture.status}</span>`;
+    document.getElementById('metaDate').textContent = lecture.lectureDate ? new Date(lecture.lectureDate).toLocaleDateString('he-IL') : '—';
+
+    document.getElementById('metaWhisper').textContent = lecture.whisperBackend || '—';
+    document.getElementById('metaSummarize').textContent = lecture.summarizeBackend || '—';
+    document.getElementById('metaSummarizedAt').textContent = lecture.summarizedAt
+      ? new Date(lecture.summarizedAt).toLocaleString('he-IL')
+      : '—';
+
+    if (lecture.status === 'summarized') {
+      loadSummary();
+    }
+    if (lecture.currentSummary) {
+      document.getElementById('qaToggle').style.display = '';
+    }
+    loadHistory();
+
+    if (!jobActive) {
+      if (lecture.status === 'transcribing') autoReconnectTranscribe();
+      else if (lecture.status === 'summarizing') pollUntilSummarized();
+    }
+  }
+
+  async function loadSummary() {
+    try {
+      const text = await fetch(`/api/classes/${classId}/lectures/${lectureId}/summary`).then(r => {
+        if (!r.ok) throw new Error();
+        return r.text();
+      });
+      rawSummary = text;
+      document.getElementById('summaryContent').innerHTML = `<div class="summary-body">${marked.parse(text)}</div>`;
+    } catch {
+      // no summary yet — keep the no-summary placeholder
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const data = await fetch(`/api/classes/${classId}/lectures/${lectureId}/summaries`).then(r => r.json());
+      currentSummaryId = data.currentSummary;
+      const { versions } = data;
+      const countEl = document.getElementById('historyCount');
+      countEl.textContent = versions.length ? `(${versions.length})` : '';
+      const list = document.getElementById('historyList');
+      if (!versions.length) {
+        list.innerHTML = '<div style="padding:12px 0;color:var(--muted);font-size:0.85rem">אין סיכומים שמורים</div>';
+        return;
+      }
+      list.innerHTML = versions.map(v => {
+        const isCurrent = v.id === data.currentSummary;
+        const date = new Date(v.date).toLocaleString('he-IL');
+        return `<div class="history-item${isCurrent ? ' history-current' : ''}" data-id="${esc(v.id)}">
+          <div class="history-item-info">
+            ${isCurrent ? '<span class="badge badge-summarized" style="font-size:0.7rem;padding:2px 7px">נוכחי</span>' : ''}
+            <span class="history-date">${date}</span>
+            <span class="history-backend">${esc(v.backend)}</span>
+          </div>
+          <div class="history-item-actions">
+            <button class="btn btn-outline btn-xs" onclick="viewSummaryVersion('${esc(v.id)}')">הצג</button>
+            ${!isCurrent ? `<button class="btn btn-outline btn-xs" onclick="setCurrentSummaryVersion('${esc(v.id)}')">הגדר כנוכחי</button>` : ''}
+            <button class="btn btn-danger btn-xs" onclick="deleteSummaryVersion('${esc(v.id)}')">מחק</button>
+          </div>
+        </div>`;
+      }).join('');
+    } catch {
+      // silently ignore
+    }
+  }
+
+  function toggleHistory() {
+    historyOpen = !historyOpen;
+    document.getElementById('historyBody').style.display = historyOpen ? 'block' : 'none';
+    document.getElementById('historyArrow').classList.toggle('open', historyOpen);
+  }
+
+  async function viewSummaryVersion(summaryId) {
+    try {
+      const text = await fetch(`/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}`).then(r => {
+        if (!r.ok) throw new Error();
+        return r.text();
+      });
+      rawSummary = text;
+      document.getElementById('summaryContent').innerHTML = `<div class="summary-body">${marked.parse(text)}</div>`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      showToast('שגיאה בטעינת סיכום', true);
+    }
+  }
+
+  async function setCurrentSummaryVersion(summaryId) {
+    try {
+      await fetch(`/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}/current`, { method: 'PUT' });
+      currentSummaryId = summaryId;
+      await viewSummaryVersion(summaryId);
+      await loadHistory();
+      showToast('הסיכום הוגדר כנוכחי');
+    } catch {
+      showToast('שגיאה', true);
+    }
+  }
+
+  async function deleteSummaryVersion(summaryId) {
+    if (!confirm('למחוק סיכום זה?')) return;
+    try {
+      await fetch(`/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}`, { method: 'DELETE' });
+      await loadHistory();
+      if (summaryId === currentSummaryId) {
+        const data = await fetch(`/api/classes/${classId}/lectures/${lectureId}/summaries`).then(r => r.json());
+        if (data.currentSummary) {
+          await viewSummaryVersion(data.currentSummary);
+        } else {
+          rawSummary = '';
+          document.getElementById('summaryContent').innerHTML = `<div class="no-summary"><p>אין סיכום עדיין</p><button class="btn" onclick="runSummarize()">▶ סכם עכשיו</button></div>`;
+        }
+      }
+      showToast('הסיכום נמחק');
+    } catch {
+      showToast('שגיאה במחיקה', true);
+    }
+  }
+
+  async function toggleTranscript() {
+    transcriptOpen = !transcriptOpen;
+    const body = document.getElementById('transcriptBody');
+    const arrow = document.getElementById('transcriptArrow');
+    body.style.display = transcriptOpen ? 'block' : 'none';
+    arrow.classList.toggle('open', transcriptOpen);
+
+    if (transcriptOpen && body.textContent === 'טוען תמלול...') {
+      try {
+        const text = await fetch(`/api/classes/${classId}/lectures/${lectureId}/transcript`).then(r => {
+          if (!r.ok) throw new Error();
+          return r.text();
+        });
+        body.textContent = text;
+      } catch {
+        body.textContent = 'אין תמלול זמין';
+      }
+    }
+  }
+
+  async function autoReconnectTranscribe() {
+    if (jobActive) return;
+    setJobActive(true, 'transcribe');
+    const btn = document.getElementById('actionRetranscribe');
+    const summarizeBtn = document.getElementById('actionSummarize');
+    btn.disabled = true;
+    summarizeBtn.disabled = true;
+    btn.textContent = '⏳ מתחבר מחדש...';
+    try {
+      await streamSSE_bg_lecture(`/api/classes/${classId}/lectures/${lectureId}/transcribe`, {}, (msg) => {
+        btn.textContent = `⏳ ${msg}`;
+      });
+      showToast('התמלול הושלם!');
+      const body = document.getElementById('transcriptBody');
+      try {
+        const text = await fetch(`/api/classes/${classId}/lectures/${lectureId}/transcript`).then(r => { if (!r.ok) throw new Error(); return r.text(); });
+        body.textContent = text;
+      } catch { body.textContent = 'אין תמלול זמין'; }
+      if (!transcriptOpen) { transcriptOpen = true; body.style.display = 'block'; document.getElementById('transcriptArrow').classList.add('open'); }
+      loadLecture();
+    } catch (err) {
+      if (err.message === 'aborted') showToast('הפעולה בוטלה');
+      else showToast(err.message || 'שגיאה', true);
+      loadLecture();
+    } finally {
+      setJobActive(false);
+      btn.disabled = false;
+      btn.textContent = '🔄 תמלל מחדש';
+      summarizeBtn.disabled = false;
+    }
+  }
+
+  async function pollUntilSummarized() {
+    if (jobActive) return;
+    setJobActive(true, 'summarize');
+    const btn = document.getElementById('actionSummarize');
+    btn.disabled = true;
+    btn.textContent = '⏳ מסכם...';
+    const interval = setInterval(async () => {
+      const data = await fetch(`/api/classes/${classId}/lectures/${lectureId}/status`).then(r => r.json()).catch(() => null);
+      if (!data || data.status !== 'summarizing') {
+        clearInterval(interval);
+        setJobActive(false);
+        btn.disabled = false;
+        btn.textContent = '🔄 סכם מחדש';
+        if (data?.status === 'summarized') { await loadSummary(); await loadHistory(); loadLecture(); showToast('הסיכום הושלם!'); }
+        else if (data?.status === 'error') showToast('שגיאה בסיכום', true);
+        else loadLecture();
+      }
+    }, 2000);
+  }
+
+  async function runSummarize() {
+    if (jobActive) return;
+    const backend = document.getElementById('modelSelect').value;
+    const summarizeBtn = document.getElementById('actionSummarize');
+    const retranscribeBtn = document.getElementById('actionRetranscribe');
+    summarizeBtn.disabled = true;
+    retranscribeBtn.disabled = true;
+
+    try {
+      const hasTranscript = await fetch(`/api/classes/${classId}/lectures/${lectureId}/transcript`).then(r => r.ok);
+      if (!hasTranscript) {
+        setJobActive(true, 'transcribe');
+        summarizeBtn.textContent = '⏳ מתמלל...';
+        await streamSSE_bg_lecture(`/api/classes/${classId}/lectures/${lectureId}/transcribe`, {}, (msg) => {
+          summarizeBtn.textContent = `⏳ ${msg}`;
+        });
+      }
+
+      setJobActive(true, 'summarize');
+      summarizeBtn.textContent = '⏳ מסכם...';
+      streamBuffer = '';
+      document.getElementById('streamingBadge').style.display = 'inline-flex';
+
+      const resp = await fetch(`/api/classes/${classId}/lectures/${lectureId}/summarize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backend }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+          if (ev.type === 'progress') {
+            summarizeBtn.textContent = `⏳ ${ev.message}`;
+          } else if (ev.type === 'token') {
+            streamBuffer += ev.token;
+            rawSummary = streamBuffer;
+            scheduleRender();
+          } else if (ev.type === 'done') {
+            rawSummary = ev.summary;
+            document.getElementById('summaryContent').innerHTML = `<div class="summary-body">${marked.parse(ev.summary)}</div>`;
+            document.getElementById('streamingBadge').style.display = 'none';
+            showToast('הסיכום הושלם!');
+            loadLecture();
+            loadHistory();
+          } else if (ev.type === 'aborted') {
+            document.getElementById('streamingBadge').style.display = 'none';
+            showToast('הפעולה בוטלה');
+            loadLecture();
+          } else if (ev.type === 'error') {
+            throw new Error(ev.message);
+          }
+        }
+      }
+    } catch (err) {
+      document.getElementById('streamingBadge').style.display = 'none';
+      showToast(err.message || 'שגיאה', true);
+    } finally {
+      setJobActive(false);
+      summarizeBtn.disabled = false;
+      summarizeBtn.textContent = '🔄 סכם מחדש';
+      retranscribeBtn.disabled = false;
+    }
+  }
+
+  async function runRetranscribe(test = false) {
+    if (jobActive) return;
+    setJobActive(true, 'transcribe');
+    const btn = document.getElementById(test ? 'actionRetranscribeTest' : 'actionRetranscribe');
+    const summarizeBtn = document.getElementById('actionSummarize');
+    btn.disabled = true;
+    summarizeBtn.disabled = true;
+
+    try {
+      await streamSSE_bg_lecture(`/api/classes/${classId}/lectures/${lectureId}/transcribe`, test ? { test: true } : {}, (msg) => {
+        btn.textContent = `⏳ ${msg}`;
+      });
+      showToast('התמלול הושלם!');
+      const body = document.getElementById('transcriptBody');
+      try {
+        const text = await fetch(`/api/classes/${classId}/lectures/${lectureId}/transcript`).then(r => {
+          if (!r.ok) throw new Error();
+          return r.text();
+        });
+        body.textContent = text;
+      } catch { body.textContent = 'אין תמלול זמין'; }
+      if (!transcriptOpen) {
+        transcriptOpen = true;
+        body.style.display = 'block';
+        document.getElementById('transcriptArrow').classList.add('open');
+      }
+      loadLecture();
+    } catch (err) {
+      if (err.message === 'aborted') showToast('הפעולה בוטלה');
+      else showToast(err.message || 'שגיאה', true);
+      loadLecture();
+    } finally {
+      setJobActive(false);
+      btn.disabled = false;
+      btn.textContent = test ? '🧪 תמלל 30 דקות (בדיקה)' : '🔄 תמלל מחדש';
+      summarizeBtn.disabled = false;
+    }
+  }
+
+  function streamSSE_bg_lecture(url, body, onProgress) {
+    return new Promise(async (resolve, reject) => {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        return reject(new Error(err.error || `HTTP ${resp.status}`));
+      }
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+          if (ev.type === 'progress') onProgress(ev.message);
+          else if (ev.type === 'done') resolve();
+          else if (ev.type === 'aborted') reject(new Error('aborted'));
+          else if (ev.type === 'error') reject(new Error(ev.message));
+        }
+      }
+      resolve();
+    });
+  }
+
+  function scheduleRender() {
+    if (renderScheduled) return;
+    renderScheduled = true;
+    requestAnimationFrame(() => {
+      document.getElementById('summaryContent').innerHTML = `<div class="summary-body">${marked.parse(streamBuffer)}</div>`;
+      renderScheduled = false;
+    });
+  }
+
+  function resetSteps() { STEPS.forEach(s => { const el = document.getElementById(`ps-${s}`); if (el) el.className = 'p-step'; }); }
+  function markDone(s) { const el = document.getElementById(`ps-${s}`); if (el) el.className = 'p-step done'; }
+  function setStep(step) {
+    STEPS.forEach((s, i) => {
+      const el = document.getElementById(`ps-${s}`);
+      if (!el) return;
+      const idx = STEPS.indexOf(step);
+      if (i < idx) markDone(s);
+      else if (i === idx) el.className = 'p-step active';
+      else el.className = 'p-step';
+    });
+  }
+
+  async function deleteLecture() {
+    if (!confirm('למחוק את ההרצאה וכל הקבצים שלה?')) return;
+    const r = await fetch(`/api/classes/${classId}/lectures/${lectureId}`, { method: 'DELETE' });
+    if (r.ok) { window.location.href = `/classes/${classId}`; }
+    else showToast('שגיאה במחיקה', true);
+  }
+
+  function copyToClipboard() {
+    if (!rawSummary) return;
+    navigator.clipboard.writeText(rawSummary).then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = '✓ הועתק';
+      setTimeout(() => { btn.textContent = 'העתק'; }, 2000);
+    });
+  }
+
+  function downloadMd() {
+    if (!rawSummary) return;
+    const blob = new Blob([rawSummary], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'summary.md';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function showToast(msg, error = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast' + (error ? ' error' : '');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Q&A ──────────────────────────────────────────────────────────────────────
+  let qaOpen = false;
+
+  function toggleQA() {
+    qaOpen = !qaOpen;
+    document.getElementById('qaBody').style.display = qaOpen ? 'block' : 'none';
+    document.getElementById('qaArrow').classList.toggle('open', qaOpen);
+    if (qaOpen && document.getElementById('qaContent').innerHTML === '') loadQA();
+  }
+
+  async function loadQA() {
+    const el = document.getElementById('qaContent');
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">טוען...</div>';
+    try {
+      const qa = await fetch(`/api/classes/${classId}/lectures/${lectureId}/qa`).then(r => r.json());
+      renderQA(qa);
+    } catch {
+      el.innerHTML = '<div style="color:var(--error);font-size:0.85rem">שגיאה בטעינה</div>';
+    }
+  }
+
+  function renderQA(qa) {
+    const el = document.getElementById('qaContent');
+    const lastRound = qa.rounds[qa.rounds.length - 1];
+    const hasUnanswered = lastRound && lastRound.feedback.length === 0;
+    if (hasUnanswered) {
+      renderQuestions(lastRound.questions, qa.rounds.length - 1);
+      return;
+    }
+    let html = lastRound?.feedback.length > 0 ? renderFeedback(lastRound) : '';
+    html += `<button class="btn btn-outline" style="margin-top:12px" onclick="startNewRound()">${lastRound ? '🔁 סיבוב נוסף' : '🧠 צור שאלות'}</button>`;
+    el.innerHTML = html;
+  }
+
+  function renderQuestions(questions, roundIndex) {
+    const el = document.getElementById('qaContent');
+    el.innerHTML = questions.map((q, i) => `
+      <div style="margin-bottom:16px">
+        <div style="font-weight:600;margin-bottom:6px">${i + 1}. ${esc(q)}</div>
+        <textarea id="qa-answer-${i}" rows="3" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.9rem;resize:vertical;font-family:inherit" placeholder="התשובה שלך..."></textarea>
+      </div>`).join('') +
+      `<button class="btn" id="qaSubmitBtn" onclick="submitAnswers(${roundIndex}, ${questions.length})">שלח תשובות</button>`;
+  }
+
+  function renderFeedback(round) {
+    return round.questions.map((q, i) => {
+      const fb = round.feedback[i];
+      const color = fb?.correct ? 'var(--success)' : 'var(--error)';
+      const icon = fb?.correct ? '✓' : '✗';
+      return `<div style="margin-bottom:16px;padding:12px;border-radius:8px;border:1px solid ${color}30;background:${color}10">
+        <div style="font-weight:600;margin-bottom:4px">${i + 1}. ${esc(q)}</div>
+        <div style="font-size:0.85rem;color:var(--muted);margin-bottom:6px">תשובתך: ${esc(round.answers[i] || '—')}</div>
+        <div style="color:${color};font-size:0.9rem">${icon} ${esc(fb?.explanation || '')}</div>
+      </div>`;
+    }).join('');
+  }
+
+  async function startNewRound() {
+    const el = document.getElementById('qaContent');
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">יוצר שאלות...</div>';
+    try {
+      const data = await fetch(`/api/classes/${classId}/lectures/${lectureId}/qa/generate`, { method: 'POST' }).then(r => r.json());
+      if (data.error) throw new Error(data.error);
+      renderQuestions(data.questions, data.roundIndex);
+    } catch (err) {
+      el.innerHTML = `<div style="color:var(--error);font-size:0.85rem">שגיאה: ${esc(err.message)}</div>`;
+    }
+  }
+
+  async function submitAnswers(roundIndex, count) {
+    const btn = document.getElementById('qaSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'שולח...';
+    const answers = Array.from({ length: count }, (_, i) =>
+      document.getElementById(`qa-answer-${i}`)?.value.trim() || ''
+    );
+    try {
+      const data = await fetch(`/api/classes/${classId}/lectures/${lectureId}/qa/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roundIndex, answers }),
+      }).then(r => r.json());
+      if (data.error) throw new Error(data.error);
+      const qa = await fetch(`/api/classes/${classId}/lectures/${lectureId}/qa`).then(r => r.json());
+      renderQA(qa);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = 'שלח תשובות';
+      showToast(err.message || 'שגיאה', true);
+    }
+  }
+
+  loadLecture();
+</script>
+</body>
+</html>

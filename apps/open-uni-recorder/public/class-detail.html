@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>הרצאות — האוניברסיטה הפתוחה</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared.css">
+  <link rel="stylesheet" href="/class-detail.css">
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/classes" class="active">הקורסים שלי</a>
+    <a href="/settings">הגדרות</a>
+  </nav>
+  <div class="header-inner">
+    <a class="back" href="/classes">← חזרה לקורסים</a>
+    <h1 id="headerTitle">טוען...</h1>
+    <p id="headerMeta"></p>
+  </div>
+</header>
+
+<main>
+  <!-- Search -->
+  <div class="card">
+    <div class="search-row">
+      <input type="text" class="search-input" id="searchInput" placeholder="חיפוש בתמלולים..." />
+      <button class="btn" onclick="doSearch()">חפש</button>
+    </div>
+    <div id="searchResults"></div>
+  </div>
+
+  <!-- OPAL Link -->
+  <div class="card" id="opalCard" style="display:none">
+    <div class="section-title">קישור OPAL לזיהוי אוטומטי</div>
+    <div class="opal-row">
+      <input type="url" id="opalUrlInput" class="form-input" dir="ltr" placeholder="https://opal.openu.ac.il/course/view.php?id=..." />
+      <button class="btn" onclick="saveOpalUrl()">שמור</button>
+    </div>
+    <p class="opal-hint">קישור לדף הקורס ב-OPAL — נדרש לזיהוי אוטומטי של הרצאות חדשות</p>
+  </div>
+
+  <!-- Lectures -->
+  <div class="card">
+    <div class="card-header">
+      <h2>הרצאות</h2>
+      <div class="header-actions">
+        <select id="modelSelect" class="select-field">
+          <option value="gemini">Gemini</option>
+          <option value="groq">Groq</option>
+          <option value="claude">Claude</option>
+          <option value="ollama">Ollama</option>
+        </select>
+        <button class="btn" onclick="openAddModal()">+ הוסף הרצאה</button>
+      </div>
+    </div>
+    <div id="lecturesContainer">
+      <div class="empty-state"><p>טוען...</p></div>
+    </div>
+  </div>
+</main>
+
+<!-- Add Lecture Modal -->
+<div class="modal-overlay" id="addModal" onclick="closeModalOnOverlay(event,'addModal')">
+  <div class="modal">
+    <h3>הרצאה חדשה</h3>
+    <div class="form-group">
+      <label>שם ההרצאה *</label>
+      <input type="text" id="lName" class="form-input" placeholder="למשל: הרצאה 3 — מבוא ל-ANOVA" />
+    </div>
+    <div class="form-group">
+      <label>קישור להרצאה *</label>
+      <input type="url" id="lUrl" class="form-input" dir="ltr" placeholder="https://opal.openu.ac.il/..." />
+    </div>
+    <div class="form-group">
+      <label>תאריך הרצאה</label>
+      <input type="date" id="lDate" class="form-input" dir="ltr" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('addModal')">ביטול</button>
+      <button class="btn" onclick="addLecture()">הוסף</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Lecture Modal -->
+<div class="modal-overlay" id="editModal" onclick="closeModalOnOverlay(event,'editModal')">
+  <div class="modal">
+    <h3>עריכת הרצאה</h3>
+    <input type="hidden" id="editLectureId" />
+    <div class="form-group">
+      <label>שם ההרצאה</label>
+      <input type="text" id="editName" class="form-input" />
+    </div>
+    <div class="form-group">
+      <label>תאריך</label>
+      <input type="date" id="editDate" class="form-input" dir="ltr" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('editModal')">ביטול</button>
+      <button class="btn" onclick="saveLecture()">שמור</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/status.js"></script>
+<script>
+  const classId = location.pathname.split('/')[2];
+  const running = new Map(); // lectureId → { message, type }
+  let pollTimer = null;
+
+  async function loadClass() {
+    const r = await fetch(`/api/classes`).then(res => res.json()).catch(() => []);
+    const cls = r.find(c => c.id === classId);
+    if (!cls) { document.getElementById('headerTitle').textContent = 'קורס לא נמצא'; return; }
+    document.title = `${cls.name} — האוניברסיטה הפתוחה`;
+    document.getElementById('headerTitle').textContent = cls.name;
+    const SEMESTER_HE = { spring: 'אביב', summer: 'קיץ', fall: 'סתיו', winter: 'חורף' };
+    const meta = [cls.semester ? SEMESTER_HE[cls.semester] : '', cls.year || ''].filter(Boolean).join(' ');
+    document.getElementById('headerMeta').textContent = meta;
+    document.getElementById('opalCard').style.display = '';
+    if (cls.opalCourseUrl) document.getElementById('opalUrlInput').value = cls.opalCourseUrl;
+  }
+
+  async function saveOpalUrl() {
+    const url = document.getElementById('opalUrlInput').value.trim();
+    const r = await fetch(`/api/classes/${classId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opalCourseUrl: url }),
+    });
+    if (r.ok) showToast('קישור OPAL נשמר');
+    else showToast('שגיאה בשמירה', true);
+  }
+
+  async function loadLectures() {
+    const container = document.getElementById('lecturesContainer');
+    try {
+      const lectures = await fetch(`/api/classes/${classId}/lectures`).then(r => r.json());
+      if (!lectures.length) {
+        container.innerHTML = `<div class="empty-state">
+          <div class="icon">🎬</div>
+          <p>אין הרצאות עדיין</p>
+          <button class="btn" onclick="openAddModal()">+ הוסף הרצאה ראשונה</button>
+        </div>`;
+        stopPolling();
+        return;
+      }
+      container.innerHTML = `<table>
+        <thead><tr>
+          <th>תאריך</th><th>שם</th><th>סטטוס</th><th>פעולות</th>
+        </tr></thead>
+        <tbody>${lectures.map(renderRow).join('')}</tbody>
+      </table>`;
+      const hasUntracked = lectures.some(l => l.status === 'pending' && !running.has(l.id));
+      hasUntracked ? startPolling() : stopPolling();
+    } catch {
+      container.innerHTML = '<div class="empty-state"><p>שגיאה בטעינה</p></div>';
+    }
+  }
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(loadLectures, 5000);
+  }
+
+  function stopPolling() {
+    if (!pollTimer) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  function renderRow(l) {
+    const date = l.lectureDate ? new Date(l.lectureDate).toLocaleDateString('he-IL') : '—';
+    const job = running.get(l.id);
+    const badge = job
+      ? `<span class="badge badge-pending"><span class="spinner-sm"></span> ${esc(job.message)}</span>`
+      : `<span class="badge ${STATUS_CLASS[l.status] || 'badge-pending'}">${STATUS_LABEL[l.status] || l.status}</span>`;
+    const actions = job
+      ? `<button class="btn btn-sm btn-danger" onclick="stopJob('${l.id}')">⏹ עצור</button>`
+      : buildActions(l);
+    return `<tr data-lid="${l.id}">
+      <td class="td-date">${date}</td>
+      <td><a href="/classes/${classId}/lectures/${l.id}" class="lecture-link">${esc(l.name)}</a></td>
+      <td class="col-status">${badge}</td>
+      <td class="col-actions"><div class="actions">${actions}</div></td>
+    </tr>`;
+  }
+
+  const STATUS_ABORT_TYPE = { processing: 'transcribe', transcribing: 'transcribe', summarizing: 'summarize' };
+
+  function buildActions(l) {
+    const id = l.id;
+    const btns = [];
+    if (STATUS_ABORT_TYPE[l.status]) {
+      btns.push(`<button class="btn btn-sm btn-danger" onclick="stopJobByStatus('${id}','${STATUS_ABORT_TYPE[l.status]}')">⏹ עצור</button>`);
+    } else if (l.status === 'pending') {
+      btns.push(`<button class="btn btn-sm" onclick="runPipeline('${id}')">▶ סכם</button>`);
+    } else if (l.status === 'transcribed') {
+      btns.push(`<button class="btn btn-sm" onclick="runSummarize('${id}')">▶ סכם</button>`);
+    } else if (l.status === 'summarized') {
+      btns.push(`<button class="btn btn-sm btn-outline" onclick="runSummarize('${id}')">🔄 סכם מחדש</button>`);
+      btns.push(`<a class="btn btn-sm btn-outline" href="/classes/${classId}/lectures/${id}">👁 צפה</a>`);
+    } else if (l.status === 'error' || l.status === 'aborted') {
+      btns.push(`<button class="btn btn-sm" onclick="runPipeline('${id}')">↩ נסה שנית</button>`);
+    }
+    btns.push(`<button class="btn btn-sm btn-outline" onclick="openEditModal('${id}','${esc(l.name)}','${l.lectureDate||''}')">✏️</button>`);
+    btns.push(`<button class="btn btn-sm btn-danger" onclick="deleteLecture('${id}')">🗑</button>`);
+    return btns.join('');
+  }
+
+  function getSelectedBackend() {
+    return document.getElementById('modelSelect').value;
+  }
+
+  async function stopJob(lectureId) {
+    const job = running.get(lectureId);
+    if (!job) return;
+    running.set(lectureId, { message: 'מבטל...', type: job.type });
+    updateRow(lectureId);
+    try {
+      await fetch(`/api/classes/${classId}/lectures/${lectureId}/abort`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: job.type }),
+      });
+    } catch {}
+  }
+
+  async function stopJobByStatus(lectureId, type) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'מבטל...';
+    try {
+      await fetch(`/api/classes/${classId}/lectures/${lectureId}/abort`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+    } catch {}
+    await loadLectures();
+  }
+
+  // ── Pipeline (smart: checks actual files) — runs in background ────────────
+  async function runPipeline(lectureId) {
+    if (running.has(lectureId)) return;
+    const backend = getSelectedBackend();
+    running.set(lectureId, { message: 'בודק...', type: 'transcribe' });
+    updateRow(lectureId);
+    try {
+      const [hasTranscript, hasSummary] = await Promise.all([
+        fetch(`/api/classes/${classId}/lectures/${lectureId}/transcript`).then(r => r.ok),
+        fetch(`/api/classes/${classId}/lectures/${lectureId}/summary`).then(r => r.ok),
+      ]);
+      if (!hasTranscript) {
+        running.set(lectureId, { message: 'מתמלל...', type: 'transcribe' });
+        updateRow(lectureId);
+        await streamSSE_bg(`/api/classes/${classId}/lectures/${lectureId}/transcribe`, lectureId, 'transcribe', {});
+      }
+      if (!hasSummary) {
+        running.set(lectureId, { message: 'מסכם...', type: 'summarize' });
+        updateRow(lectureId);
+        await streamSSE_bg(`/api/classes/${classId}/lectures/${lectureId}/summarize`, lectureId, 'summarize', { backend });
+      }
+      if (hasTranscript && hasSummary) {
+        running.set(lectureId, { message: 'הכל קיים', type: null });
+      } else {
+        showToast('הסיכום הושלם!');
+      }
+    } catch (err) {
+      if (err.message === 'aborted') showToast('הפעולה בוטלה');
+      else showToast(err.message || 'שגיאה', true);
+    } finally {
+      running.delete(lectureId);
+      loadLectures();
+    }
+  }
+
+  async function runSummarize(lectureId) {
+    if (running.has(lectureId)) return;
+    const backend = getSelectedBackend();
+    running.set(lectureId, { message: 'מסכם...', type: 'summarize' });
+    updateRow(lectureId);
+    try {
+      await streamSSE_bg(`/api/classes/${classId}/lectures/${lectureId}/summarize`, lectureId, 'summarize', { backend });
+      showToast('הסיכום הושלם!');
+    } catch (err) {
+      if (err.message === 'aborted') showToast('הפעולה בוטלה');
+      else showToast(err.message || 'שגיאה', true);
+    } finally {
+      running.delete(lectureId);
+      loadLectures();
+    }
+  }
+
+  function streamSSE_bg(url, lectureId, jobType, body = {}) {
+    return new Promise(async (resolve, reject) => {
+      const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        return reject(new Error(err.error || `HTTP ${resp.status}`));
+      }
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let ev; try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+          if (ev.type === 'progress') {
+            running.set(lectureId, { message: ev.message, type: jobType });
+            updateRow(lectureId);
+          } else if (ev.type === 'done') {
+            resolve();
+          } else if (ev.type === 'aborted') {
+            reject(new Error('aborted'));
+          } else if (ev.type === 'error') {
+            reject(new Error(ev.message));
+          }
+        }
+      }
+      resolve();
+    });
+  }
+
+  function updateRow(lectureId) {
+    const tr = document.querySelector(`tr[data-lid="${lectureId}"]`);
+    if (!tr) return;
+    const job = running.get(lectureId);
+    const statusTd = tr.querySelector('.col-status');
+    const actionsTd = tr.querySelector('.col-actions');
+    if (job) {
+      if (statusTd) statusTd.innerHTML = `<span class="badge badge-pending"><span class="spinner-sm"></span> ${esc(job.message)}</span>`;
+      if (actionsTd) actionsTd.innerHTML = `<div class="actions"><button class="btn btn-sm btn-danger" onclick="stopJob('${lectureId}')">⏹ עצור</button></div>`;
+    }
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  async function doSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    const container = document.getElementById('searchResults');
+    if (!q) { container.innerHTML = ''; return; }
+    container.innerHTML = '<p class="search-msg">מחפש...</p>';
+    try {
+      const results = await fetch(`/api/search?q=${encodeURIComponent(q)}&classId=${classId}`).then(r => r.json());
+      if (!results.length) { container.innerHTML = '<p class="search-msg">לא נמצאו תוצאות</p>'; return; }
+      container.innerHTML = results.map(r => `
+        <div class="search-result-item" onclick="location.href='/classes/${classId}/lectures/${r.lectureId}'">
+          <div class="search-result-name">${esc(r.lectureName)}</div>
+          <div class="search-result-snippet">...${esc(r.snippet)}...</div>
+        </div>`).join('');
+    } catch { container.innerHTML = '<p class="search-msg search-msg--error">שגיאה בחיפוש</p>'; }
+  }
+
+  document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  // ── Lecture CRUD ──────────────────────────────────────────────────────────
+  function openAddModal() {
+    document.getElementById('addModal').classList.add('open');
+    setTimeout(() => document.getElementById('lName').focus(), 100);
+  }
+
+  async function addLecture() {
+    const name = document.getElementById('lName').value.trim();
+    const url = document.getElementById('lUrl').value.trim();
+    if (!name || !url) { showToast('שם וקישור נדרשים', true); return; }
+    const lectureDate = document.getElementById('lDate').value || undefined;
+    const r = await fetch(`/api/classes/${classId}/lectures`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, url, lectureDate }),
+    });
+    if (r.ok) {
+      closeModal('addModal');
+      ['lName','lUrl','lDate'].forEach(id => { document.getElementById(id).value = ''; });
+      showToast('ההרצאה נוספה');
+      loadLectures();
+    } else {
+      const err = await r.json();
+      showToast(err.error || 'שגיאה', true);
+    }
+  }
+
+  function openEditModal(id, name, date) {
+    document.getElementById('editLectureId').value = id;
+    document.getElementById('editName').value = name;
+    document.getElementById('editDate').value = date;
+    document.getElementById('editModal').classList.add('open');
+  }
+
+  async function saveLecture() {
+    const id = document.getElementById('editLectureId').value;
+    const name = document.getElementById('editName').value.trim();
+    const lectureDate = document.getElementById('editDate').value || null;
+    const r = await fetch(`/api/classes/${classId}/lectures/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, lectureDate }),
+    });
+    if (r.ok) { closeModal('editModal'); showToast('נשמר'); loadLectures(); }
+    else showToast('שגיאה', true);
+  }
+
+  async function deleteLecture(id) {
+    if (!confirm('למחוק את ההרצאה?')) return;
+    const r = await fetch(`/api/classes/${classId}/lectures/${id}`, { method: 'DELETE' });
+    if (r.ok) { showToast('נמחק'); loadLectures(); }
+    else showToast('שגיאה', true);
+  }
+
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  function closeModalOnOverlay(e, id) { if (e.target === document.getElementById(id)) closeModal(id); }
+
+  function showToast(msg, error = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (error ? ' error' : '');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal('addModal'); closeModal('editModal'); } });
+
+  loadClass();
+  loadLectures();
+</script>
+</body>
+</html>

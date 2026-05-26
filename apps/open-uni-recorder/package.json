@@ -1,0 +1,31 @@
+{
+  "name": "@toolbox/open-uni-recorder",
+  "version": "1.0.0",
+  "description": "Summarize Open University video lectures using AI",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "install:whisper-cpp": "npx nodejs-whisper download",
+    "install:playwright": "npx playwright install chromium"
+  },
+
+  "devDependencies": {
+    "@toolbox/config": "workspace:*"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
+    "@google/generative-ai": "^0.21.0",
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "groq-sdk": "^1.1.2",
+    "marked": "^18.0.4",
+    "node-cron": "^4.2.1",
+    "nodejs-whisper": "latest",
+    "nodemailer": "^8.0.7",
+    "ollama": "^0.6.3",
+    "openai-whisper-js": "latest",
+    "playwright": "^1.59.1"
+  }
+}

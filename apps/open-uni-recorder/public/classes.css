@@ -1,0 +1,35 @@
+/* classes.html */
+
+main { max-width: 900px; margin: -28px auto 60px; padding: 0 20px; }
+
+.classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.classes-grid .empty-state { grid-column: 1 / -1; }
+.class-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  position: relative;
+}
+.class-card:hover { border-color: var(--primary); box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-2px); }
+.class-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 6px; }
+.class-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; }
+.class-count {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #EEF2FF; color: var(--primary);
+  border: 1.5px solid #C7D2FE;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.class-delete {
+  position: absolute; top: 14px; left: 14px;
+  background: none; border: none; cursor: pointer;
+  color: #CBD5E1; font-size: 1rem; transition: color 0.15s;
+}
+.class-delete:hover { color: var(--error); }

@@ -1,0 +1,23 @@
+# Environment variables (Sensitive data!)
+.env
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# IDE / System files
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary files
+tmp/
+
+# Personal / local notes
+todo.md
+
+# Claude local settings (machine-specific)
+.claude/settings.local.json
+
+# Cached audio / transcripts (large binary + personal data)
+saved/

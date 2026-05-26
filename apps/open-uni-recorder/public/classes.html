@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>הקורסים שלי — האוניברסיטה הפתוחה</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shared.css">
+  <link rel="stylesheet" href="/classes.css">
+</head>
+<body>
+
+<header>
+  <nav>
+    <a href="/classes" class="active">הקורסים שלי</a>
+    <a href="/settings">הגדרות</a>
+  </nav>
+  <div class="header-inner">
+    <div class="logo">🎓</div>
+    <h1>הקורסים שלי</h1>
+    <p>ניהול הרצאות לפי קורס</p>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div class="card-header">
+      <h2>קורסים</h2>
+      <button class="btn" onclick="openModal()">+ קורס חדש</button>
+    </div>
+    <div id="classesGrid" class="classes-grid">
+      <div class="empty-state">
+        <div class="spinner-inline"></div>
+        <p>טוען...</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal" onclick="closeModalOnOverlay(event)">
+  <div class="modal">
+    <h3>קורס חדש</h3>
+    <div class="form-group">
+      <label>שם הקורס *</label>
+      <input type="text" id="className" class="form-input" placeholder="למשל: סטטיסטיקה 101" />
+    </div>
+    <div class="form-group">
+      <label>סמסטר</label>
+      <select id="classSemester" class="form-input form-select">
+        <option value="">— בחר —</option>
+        <option value="spring">אביב</option>
+        <option value="summer">קיץ</option>
+        <option value="fall">סתיו</option>
+        <option value="winter">חורף</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>שנה</label>
+      <input type="number" id="classYear" class="form-input" placeholder="2026" min="2020" max="2040" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">ביטול</button>
+      <button class="btn" onclick="createClass()">צור קורס</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const SEMESTER_HE = { spring: 'אביב', summer: 'קיץ', fall: 'סתיו', winter: 'חורף' };
+
+  async function loadClasses() {
+    const grid = document.getElementById('classesGrid');
+    try {
+      const classes = await fetch('/api/classes').then(r => r.json());
+      if (!classes.length) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">📚</div>
+            <p>אין קורסים עדיין</p>
+            <button class="btn" onclick="openModal()">+ הוסף קורס ראשון</button>
+          </div>`;
+        return;
+      }
+      grid.innerHTML = classes.map(c => {
+        const sem = c.semester ? `${SEMESTER_HE[c.semester] || c.semester}` : '';
+        const yr = c.year ? ` ${c.year}` : '';
+        const meta = [sem + yr].filter(Boolean).join(' ');
+        return `
+          <div class="class-card" onclick="goToClass('${c.id}')">
+            <button class="class-delete" onclick="deleteClass(event,'${c.id}')" title="מחק קורס">✕</button>
+            <h3>${esc(c.name)}</h3>
+            ${meta ? `<div class="class-meta">${esc(meta)}</div>` : ''}
+            <span class="class-count">📖 ${c.lectureCount} הרצאות</span>
+          </div>`;
+      }).join('');
+    } catch {
+      grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><p>שגיאה בטעינת הקורסים</p></div>';
+    }
+  }
+
+  function goToClass(id) {
+    window.location.href = `/classes/${id}`;
+  }
+
+  async function deleteClass(e, id) {
+    e.stopPropagation();
+    if (!confirm('למחוק את הקורס וכל ההרצאות שלו?')) return;
+    const r = await fetch(`/api/classes/${id}`, { method: 'DELETE' });
+    if (r.ok) { showToast('הקורס נמחק'); loadClasses(); }
+    else showToast('שגיאה במחיקה', true);
+  }
+
+  function openModal() {
+    document.getElementById('modal').classList.add('open');
+    setTimeout(() => document.getElementById('className').focus(), 100);
+  }
+  function closeModal() { document.getElementById('modal').classList.remove('open'); }
+  function closeModalOnOverlay(e) { if (e.target === document.getElementById('modal')) closeModal(); }
+
+  async function createClass() {
+    const name = document.getElementById('className').value.trim();
+    if (!name) { document.getElementById('className').focus(); return; }
+    const semester = document.getElementById('classSemester').value;
+    const year = document.getElementById('classYear').value;
+    const r = await fetch('/api/classes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, semester, year: year ? Number(year) : undefined }),
+    });
+    if (r.ok) {
+      const cls = await r.json();
+      closeModal();
+      document.getElementById('className').value = '';
+      document.getElementById('classSemester').value = '';
+      document.getElementById('classYear').value = '';
+      showToast('הקורס נוצר');
+      loadClasses();
+      setTimeout(() => goToClass(cls.id), 600);
+    } else {
+      const err = await r.json();
+      showToast(err.error || 'שגיאה', true);
+    }
+  }
+
+  function showToast(msg, error = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (error ? ' error' : '');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  document.getElementById('className').addEventListener?.('keydown', e => { if (e.key === 'Enter') createClass(); });
+
+  loadClasses();
+</script>
+</body>
+</html>
