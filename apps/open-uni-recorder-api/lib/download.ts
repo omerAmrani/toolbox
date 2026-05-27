@@ -1,36 +1,36 @@
 import { existsSync, rmSync, statSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
-import { transcribe } from './transcribe.js';
-import { TMP_DIR } from './config.js';
+import { transcribe } from './transcribe';
+import { TMP_DIR } from './config';
 
 const CONCURRENCY = parseInt(process.env.WHISPER_CONCURRENCY || '2', 10);
 const CHUNK_SECS = 600;
 
-function secsToHMS(s) {
+function secsToHMS(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = Math.floor(s % 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-function secsToHM(s) {
+function secsToHM(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function segPath(i) {
+function segPath(i: number): string {
   return path.join(TMP_DIR, `chunk_${String(i).padStart(3, '0')}.wav`);
 }
 
 const TIMESTAMP_INTERVAL_SECS = 60;
 
-function buildChunkText(segments, chunkIdx) {
+function buildChunkText(segments: { startSec: number; text: string }[], chunkIdx: number): string {
   if (!segments.length) return '';
-  const lines = [];
+  const lines: string[] = [];
   let lastStampSec = -TIMESTAMP_INTERVAL_SECS;
-  let pending = [];
+  let pending: string[] = [];
 
   for (const seg of segments) {
     const absSec = chunkIdx * CHUNK_SECS + seg.startSec;
@@ -46,23 +46,23 @@ function buildChunkText(segments, chunkIdx) {
   return lines.join('\n');
 }
 
-async function transcribeSegment(filePath, idx, total, onProgress) {
+async function transcribeSegment(filePath: string, idx: number, total: number, onProgress: (msg: string) => void): Promise<{ text: string; segments: any[] }> {
   console.log(`  [transcribe] ${path.basename(filePath)} (${statSync(filePath).size} bytes)`);
   const result = await transcribe(filePath, () => onProgress(`מתמלל קטע ${idx + 1} מתוך ${total}...`));
   rmSync(filePath);
   return result;
 }
 
-function runTranscribeQueue(onProgress) {
-  const results = [];
-  const pending = [];
+function runTranscribeQueue(onProgress: (msg: string) => void) {
+  const results: { idx: number; text: string; chunkText: string }[] = [];
+  const pending: { idx: number; p: string; resolve: (v: { chunkText: string }) => void }[] = [];
   let active = 0;
   let totalSeen = 0;
 
   function drain() {
     while (active < CONCURRENCY && pending.length) {
       active++;
-      const { idx, p, resolve } = pending.shift();
+      const { idx, p, resolve } = pending.shift()!;
       console.log(`\n🎙️  Transcribing segment ${idx + 1} (active=${active}, pending=${pending.length})...`);
       transcribeSegment(p, idx, totalSeen, onProgress).then((result) => {
         const chunkText = buildChunkText(result.segments, idx);
@@ -70,7 +70,7 @@ function runTranscribeQueue(onProgress) {
         active--;
         drain();
         resolve({ chunkText: chunkText || result.text });
-      }).catch((err) => {
+      }).catch((err: any) => {
         console.error(`  [transcribe error] segment ${idx + 1}: ${err.message}`);
         active--;
         drain();
@@ -82,15 +82,15 @@ function runTranscribeQueue(onProgress) {
   return {
     get active() { return active; },
     get pending() { return pending.length; },
-    enqueue(idx) {
+    enqueue(idx: number): Promise<{ chunkText: string }> {
       totalSeen = Math.max(totalSeen, idx + 1);
       return new Promise((resolve) => {
         pending.push({ idx, p: segPath(idx), resolve });
         drain();
       });
     },
-    async waitAll() {
-      await new Promise((resolve) => {
+    async waitAll(): Promise<string> {
+      await new Promise<void>((resolve) => {
         const check = setInterval(() => {
           if (active === 0 && pending.length === 0) { clearInterval(check); resolve(); }
         }, 500);
@@ -102,9 +102,14 @@ function runTranscribeQueue(onProgress) {
   };
 }
 
-// Downloads stream and transcribes concurrently.
-// If saveMp3Path is provided, also saves the full audio as mp3 (single ffmpeg pass).
-export async function downloadAndTranscribe(videoUrl, onProgress = () => {}, onChunkReady = null, saveMp3Path = null, maxDurationSecs = null, signal = null) {
+export async function downloadAndTranscribe(
+  videoUrl: string,
+  onProgress = (_: string) => {},
+  onChunkReady: ((idx: number, chunkText: string) => void) | null = null,
+  saveMp3Path: string | null = null,
+  maxDurationSecs: number | null = null,
+  signal: AbortSignal | null = null,
+): Promise<string> {
   if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
   for (let i = 0; existsSync(segPath(i)); i++) rmSync(segPath(i));
 
@@ -118,7 +123,7 @@ export async function downloadAndTranscribe(videoUrl, onProgress = () => {}, onC
 
   args.push(
     '-vn', '-ac', '1', '-ar', '16000', '-acodec', 'pcm_s16le',
-    '-f', 'segment', '-segment_time', CHUNK_SECS,
+    '-f', 'segment', '-segment_time', String(CHUNK_SECS),
     '-reset_timestamps', '1',
     path.join(TMP_DIR, 'chunk_%03d.wav'),
   );
@@ -137,14 +142,14 @@ export async function downloadAndTranscribe(videoUrl, onProgress = () => {}, onC
   let nextToDetect = 0;
   let stalledByWatchdog = false;
   const queue = runTranscribeQueue(onProgress);
-  const chunkJobs = [];
+  const chunkJobs: Promise<any>[] = [];
   let stallTimer = setTimeout(() => {
     console.error('\n[ffmpeg] no progress for 3 minutes — killing, saving partial transcript');
     stalledByWatchdog = true;
     proc.kill('SIGKILL');
   }, STALL_TIMEOUT_MS);
 
-  proc.stderr.on('data', (chunk) => {
+  proc.stderr.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
     const durMatch = text.match(/Duration:\s*(\d+):(\d+):(\d+)/);
     if (durMatch && !totalSecs)
@@ -183,14 +188,14 @@ export async function downloadAndTranscribe(videoUrl, onProgress = () => {}, onC
     }
   }, 2000);
 
-  await new Promise((resolve, reject) => {
-    proc.on('close', (code) => {
+  await new Promise<void>((resolve, reject) => {
+    proc.on('close', (code: number | null) => {
       clearTimeout(stallTimer);
       process.stdout.write('\n');
       if (code === 0 || stalledByWatchdog || abortedBySignal) resolve();
       else reject(new Error(`ffmpeg exited with code ${code}`));
     });
-    proc.on('error', (err) => { clearTimeout(stallTimer); reject(err); });
+    proc.on('error', (err: Error) => { clearTimeout(stallTimer); reject(err); });
   });
 
   clearInterval(pollTimer);

@@ -1,4 +1,4 @@
-export function buildPrompt(transcript) {
+export function buildPrompt(transcript: string): string {
   return `Always respond in Hebrew. Technical terms may remain in English.
 
 You are an academic lecture summarizer for a student. Summarize the following lecture transcript fully and thoroughly — do not cut content short.
@@ -16,6 +16,6 @@ Transcript:
 ${transcript}`;
 }
 
-export function summarizeChunk(chunkText) {
+export function summarizeChunk(chunkText: string): Promise<string> {
   return Promise.resolve(chunkText);
 }

@@ -2,13 +2,13 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
-function getClient() {
+function getClient(): Anthropic {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY לא מוגדר ב-.env');
   return new Anthropic({ apiKey: key });
 }
 
-export async function generateQuestions(summaryContent) {
+export async function generateQuestions(summaryContent: string): Promise<string[]> {
   const client = getClient();
   const response = await client.messages.create({
     model: MODEL,
@@ -24,13 +24,13 @@ ${summaryContent}`,
     }],
   });
 
-  const text = response.content[0].text.trim();
+  const text = (response.content[0] as any).text.trim();
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) throw new Error('תגובת Claude לא תקינה — לא נמצא JSON');
   return JSON.parse(match[0]);
 }
 
-export async function evaluateAnswers(questions, answers) {
+export async function evaluateAnswers(questions: string[], answers: string[]): Promise<{ correct: boolean; explanation: string }[]> {
   const client = getClient();
   const pairs = questions.map((q, i) =>
     `שאלה ${i + 1}: ${q}\nתשובת התלמיד: ${answers[i] || '(לא נענה)'}`
@@ -49,7 +49,7 @@ ${pairs}`,
     }],
   });
 
-  const text = response.content[0].text.trim();
+  const text = (response.content[0] as any).text.trim();
   const match = text.match(/\[[\s\S]*\]/);
   if (!match) throw new Error('תגובת Claude לא תקינה — לא נמצא JSON');
   return JSON.parse(match[0]);

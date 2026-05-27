@@ -2,12 +2,12 @@ import { chromium } from 'playwright';
 import { writeFileSync } from 'fs';
 import { spawn } from 'child_process';
 import path from 'path';
-import { OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID, TMP_DIR } from './config.js';
+import { OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID, TMP_DIR } from './config';
 
-export async function extractVideoUrl(pageUrl, onProgress = () => {}, signal = null) {
+export async function extractVideoUrl(pageUrl: string, onProgress = (_: string) => {}, signal: AbortSignal | null = null): Promise<string> {
   if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
 
-  const log = (msg) => { console.log(msg); onProgress(msg); };
+  const log = (msg: string) => { console.log(msg); onProgress(msg); };
 
   const playlistId = new URL(pageUrl).searchParams.get('v');
   if (!playlistId) throw new Error('Missing v= param in URL');
@@ -30,9 +30,9 @@ export async function extractVideoUrl(pageUrl, onProgress = () => {}, signal = n
     log(`Login page loaded: ${page.url()}`);
 
     log('Filling credentials...');
-    await page.fill('#p_user', OPENU_USERNAME);
-    await page.fill('#p_mis_student', OPENU_ID);
-    await page.fill('input[type="password"]', OPENU_PASSWORD);
+    await page.fill('#p_user', OPENU_USERNAME!);
+    await page.fill('#p_mis_student', OPENU_ID!);
+    await page.fill('input[type="password"]', OPENU_PASSWORD!);
 
     log('Submitting login form...');
     await page.click('input[type="submit"], button[type="submit"]');
@@ -48,8 +48,8 @@ export async function extractVideoUrl(pageUrl, onProgress = () => {}, signal = n
       throw new Error(`Login failed — still on: ${landed}. Check credentials in .env`);
     }
 
-    let streamUrl = null;
-    page.on('request', (req) => {
+    let streamUrl: string | null = null;
+    page.on('request', (req: any) => {
       const url = req.url();
       if (url.includes('.m3u8') && !streamUrl) {
         log(`Intercepted HLS manifest: ${url.substring(0, 120)}...`);
@@ -78,16 +78,17 @@ export async function extractVideoUrl(pageUrl, onProgress = () => {}, signal = n
     if (!streamUrl) {
       log('Interceptor missed — trying video element src...');
       streamUrl = await page.evaluate(() => {
-        for (const frame of document.querySelectorAll('iframe')) {
+        const doc = (globalThis as any).document;
+        for (const frame of doc.querySelectorAll('iframe')) {
           try {
-            const v = frame.contentDocument?.querySelector('video');
+            const v = (frame as any).contentDocument?.querySelector('video');
             if (v?.currentSrc) return v.currentSrc;
           } catch (_) {}
         }
-        const v = document.querySelector('video');
+        const v = doc.querySelector('video') as any;
         return v?.currentSrc || v?.src || null;
       });
-      if (streamUrl) log(`Got URL from video element: ${streamUrl.substring(0, 120)}...`);
+      if (streamUrl) log(`Got URL from video element: ${(streamUrl as string).substring(0, 120)}...`);
     }
 
     if (!streamUrl) {
@@ -96,7 +97,7 @@ export async function extractVideoUrl(pageUrl, onProgress = () => {}, signal = n
 
     log(`Stream URL: ${streamUrl.substring(0, 100)}...`);
     return streamUrl;
-  } catch (err) {
+  } catch (err: any) {
     if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
     const screenshotPath = path.join(TMP_DIR, 'debug-screenshot.png');
     try {

@@ -1,18 +1,16 @@
-import Database from 'better-sqlite3';
+import Database, { Database as BetterDatabase } from 'better-sqlite3';
 import path from 'path';
 import { mkdirSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { getSettings } from '../settings.js';
+import { getSettings } from '../settings';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_DATA_DIR = path.resolve(__dirname, '..', '..', 'recorder-db');
-export const DATA_DIR = getSettings().dataDir || DEFAULT_DATA_DIR;
-export const CLASSES_DIR = path.join(DATA_DIR, 'classes');
+export const DATA_DIR: string = getSettings().dataDir || DEFAULT_DATA_DIR;
+export const CLASSES_DIR: string = path.join(DATA_DIR, 'classes');
 
 mkdirSync(DATA_DIR, { recursive: true });
 mkdirSync(CLASSES_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'recorder.db'));
+const db: BetterDatabase = new Database(path.join(DATA_DIR, 'recorder.db'));
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 

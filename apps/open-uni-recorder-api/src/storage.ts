@@ -1,10 +1,10 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'fs';
 import path from 'path';
-import db, { CLASSES_DIR } from './db.js';
+import db, { CLASSES_DIR } from './db';
 
 export { CLASSES_DIR };
 
-function makeId(name) {
+function makeId(name: string): string {
   const clean = name.toLowerCase()
     .replace(/[^\w]/g, '-')
     .replace(/-+/g, '-')
@@ -13,11 +13,11 @@ function makeId(name) {
   return `${clean || 'item'}-${Date.now()}`;
 }
 
-function writeMetaBackup(filePath, data) {
+function writeMetaBackup(filePath: string, data: any): void {
   writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
-function lectureWithSummaries(row) {
+function lectureWithSummaries(row: any): any {
   if (!row) return null;
   const summaries = db.prepare(
     'SELECT id, date, backend FROM summaries WHERE lectureId = ? ORDER BY id DESC'
@@ -26,7 +26,7 @@ function lectureWithSummaries(row) {
 }
 
 // ── Classes ───────────────────────────────────────────────────────────────────
-export function createClass({ name, semester, year }) {
+export function createClass({ name, semester, year }: { name: string; semester?: string; year?: number }): any {
   const id = makeId(name);
   const dir = path.join(CLASSES_DIR, id);
   mkdirSync(path.join(dir, 'lectures'), { recursive: true });
@@ -37,15 +37,15 @@ export function createClass({ name, semester, year }) {
   return meta;
 }
 
-export function getClasses() {
+export function getClasses(): any[] {
   return db.prepare('SELECT * FROM classes ORDER BY createdAt DESC').all();
 }
 
-export function getClass(classId) {
+export function getClass(classId: string): any {
   return db.prepare('SELECT * FROM classes WHERE id = ?').get(classId) || null;
 }
 
-export function updateClassMeta(classId, updates) {
+export function updateClassMeta(classId: string, updates: Record<string, any>): any {
   const cls = getClass(classId);
   if (!cls) return null;
   const updated = { ...cls, ...updates };
@@ -55,7 +55,7 @@ export function updateClassMeta(classId, updates) {
   return updated;
 }
 
-export function deleteClass(classId) {
+export function deleteClass(classId: string): boolean {
   if (!getClass(classId)) return false;
   db.prepare('DELETE FROM summaries WHERE lectureId IN (SELECT id FROM lectures WHERE classId = ?)').run(classId);
   db.prepare('DELETE FROM lectures WHERE classId = ?').run(classId);
@@ -66,7 +66,7 @@ export function deleteClass(classId) {
 }
 
 // ── Lectures ──────────────────────────────────────────────────────────────────
-export function createLecture(classId, { name, url, lectureDate, status = 'pending' }) {
+export function createLecture(classId: string, { name, url, lectureDate, status = 'pending' }: { name: string; url: string; lectureDate?: string | null; status?: string }): any {
   const id = makeId(name);
   const dir = path.join(CLASSES_DIR, classId, 'lectures', id);
   mkdirSync(dir, { recursive: true });
@@ -92,19 +92,19 @@ export function createLecture(classId, { name, url, lectureDate, status = 'pendi
   return { ...meta, summaries: [] };
 }
 
-export function getLectures(classId) {
+export function getLectures(classId: string): any[] {
   const rows = db.prepare(
     'SELECT * FROM lectures WHERE classId = ? ORDER BY COALESCE(lectureDate, addedAt) ASC'
   ).all(classId);
   return rows.map(lectureWithSummaries);
 }
 
-export function getLecture(classId, lectureId) {
+export function getLecture(classId: string, lectureId: string): any {
   const row = db.prepare('SELECT * FROM lectures WHERE id = ? AND classId = ?').get(lectureId, classId);
   return lectureWithSummaries(row);
 }
 
-export function updateLectureMeta(classId, lectureId, updates) {
+export function updateLectureMeta(classId: string, lectureId: string, updates: Record<string, any>): any {
   const lecture = getLecture(classId, lectureId);
   if (!lecture) return null;
   const updated = { ...lecture, ...updates };
@@ -115,7 +115,7 @@ export function updateLectureMeta(classId, lectureId, updates) {
   return updated;
 }
 
-export function deleteLecture(classId, lectureId) {
+export function deleteLecture(classId: string, lectureId: string): boolean {
   if (!getLecture(classId, lectureId)) return false;
   db.prepare('DELETE FROM summaries WHERE lectureId = ?').run(lectureId);
   db.prepare('DELETE FROM lectures WHERE id = ?').run(lectureId);
@@ -124,16 +124,16 @@ export function deleteLecture(classId, lectureId) {
   return true;
 }
 
-export function lectureDirPath(classId, lectureId) {
+export function lectureDirPath(classId: string, lectureId: string): string {
   return path.join(CLASSES_DIR, classId, 'lectures', lectureId);
 }
 
-export function summariesDirPath(classId, lectureId) {
+export function summariesDirPath(classId: string, lectureId: string): string {
   return path.join(CLASSES_DIR, classId, 'lectures', lectureId, 'summaries');
 }
 
 // ── Summary versions ──────────────────────────────────────────────────────────
-export function saveSummaryVersion(classId, lectureId, content, backend) {
+export function saveSummaryVersion(classId: string, lectureId: string, content: string, backend: string): string {
   const summariesDir = summariesDirPath(classId, lectureId);
   mkdirSync(summariesDir, { recursive: true });
   const id = String(Date.now());
@@ -148,7 +148,7 @@ export function saveSummaryVersion(classId, lectureId, content, backend) {
   return id;
 }
 
-export function getSummaryVersions(classId, lectureId) {
+export function getSummaryVersions(classId: string, lectureId: string): any {
   const lecture = getLecture(classId, lectureId);
   if (!lecture) return { versions: [], currentSummary: null };
   const versions = db.prepare(
@@ -157,26 +157,26 @@ export function getSummaryVersions(classId, lectureId) {
   return { versions, currentSummary: lecture.currentSummary };
 }
 
-export function getSummaryContent(classId, lectureId, summaryId) {
+export function getSummaryContent(classId: string, lectureId: string, summaryId: string): string | null {
   const p = path.join(summariesDirPath(classId, lectureId), `${summaryId}.md`);
   if (!existsSync(p)) return null;
   return readFileSync(p, 'utf8');
 }
 
-export function getCurrentSummaryContent(classId, lectureId) {
+export function getCurrentSummaryContent(classId: string, lectureId: string): string | null {
   const lecture = getLecture(classId, lectureId);
   if (!lecture?.currentSummary) return null;
   return getSummaryContent(classId, lectureId, lecture.currentSummary);
 }
 
-export function setCurrentSummary(classId, lectureId, summaryId) {
+export function setCurrentSummary(classId: string, lectureId: string, summaryId: string): boolean {
   const p = path.join(summariesDirPath(classId, lectureId), `${summaryId}.md`);
   if (!existsSync(p)) return false;
   db.prepare('UPDATE lectures SET currentSummary = ? WHERE id = ?').run(summaryId, lectureId);
   return true;
 }
 
-export function deleteSummaryVersion(classId, lectureId, summaryId) {
+export function deleteSummaryVersion(classId: string, lectureId: string, summaryId: string): boolean {
   const p = path.join(summariesDirPath(classId, lectureId), `${summaryId}.md`);
   if (!existsSync(p)) return false;
   rmSync(p);
@@ -185,7 +185,7 @@ export function deleteSummaryVersion(classId, lectureId, summaryId) {
   if (lecture?.currentSummary === summaryId) {
     const next = db.prepare(
       'SELECT id FROM summaries WHERE lectureId = ? ORDER BY id DESC LIMIT 1'
-    ).get(lectureId);
+    ).get(lectureId) as any;
     db.prepare('UPDATE lectures SET currentSummary = ? WHERE id = ?').run(next?.id || null, lectureId);
   }
   return true;

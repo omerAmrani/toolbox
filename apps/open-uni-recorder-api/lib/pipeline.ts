@@ -1,33 +1,31 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import {
   getClasses, getLectures, getLecture, updateLectureMeta,
   createLecture, lectureDirPath, saveSummaryVersion,
-} from '../src/storage.js';
-import { detectNewLectures } from './detect.js';
-import { extractVideoUrl } from './extract.js';
-import { downloadAndTranscribe } from './download.js';
-import { getSummarizer } from './summarize.js';
-import { WHISPER_MODEL, WHISPER_BACKEND, SUMMARIZE_BACKEND } from './config.js';
-import { sendLectureSummary, sendDetectionNotification } from './email.js';
+} from '../src/storage';
+import { detectNewLectures } from './detect';
+import { extractVideoUrl } from './extract';
+import { downloadAndTranscribe } from './download';
+import { getSummarizer } from './summarize';
+import { WHISPER_MODEL, WHISPER_BACKEND, SUMMARIZE_BACKEND } from './config';
+import { sendLectureSummary, sendDetectionNotification } from './email';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const CRON_LOG_PATH = path.join(DATA_DIR, 'cron-log.json');
 
 let queueRunning = false;
-const activeAbortControllers = new Map();
+const activeAbortControllers = new Map<string, AbortController>();
 
-export function isQueueRunning() { return queueRunning; }
+export function isQueueRunning(): boolean { return queueRunning; }
 
 // ── Cron log ──────────────────────────────────────────────────────────────────
 
-function readCronLog() {
+function readCronLog(): any[] {
   try { return JSON.parse(readFileSync(CRON_LOG_PATH, 'utf8')); } catch { return []; }
 }
 
-export function logCronRun(entry) {
+export function logCronRun(entry: Record<string, any>): void {
   mkdirSync(DATA_DIR, { recursive: true });
   const log = readCronLog();
   log.push({ ...entry, timestamp: new Date().toISOString() });
@@ -35,14 +33,14 @@ export function logCronRun(entry) {
   writeFileSync(CRON_LOG_PATH, JSON.stringify(log, null, 2));
 }
 
-export function getLastCronLog() {
+export function getLastCronLog(): any {
   const log = readCronLog();
   return log[log.length - 1] || null;
 }
 
 // ── Startup recovery ──────────────────────────────────────────────────────────
 
-export function resetStuckProcessing() {
+export function resetStuckProcessing(): void {
   for (const cls of getClasses()) {
     for (const lecture of getLectures(cls.id)) {
       if (lecture.status === 'processing') {
@@ -59,7 +57,7 @@ export function resetStuckProcessing() {
 
 // ── Queue runner ──────────────────────────────────────────────────────────────
 
-export async function runQueue(onProgress = () => {}) {
+export async function runQueue(onProgress = (_: string) => {}): Promise<void> {
   if (queueRunning) {
     onProgress('תור כבר פועל');
     return;
@@ -67,7 +65,7 @@ export async function runQueue(onProgress = () => {}) {
   queueRunning = true;
 
   try {
-    const pending = [];
+    const pending: { classId: string; lectureId: string }[] = [];
     for (const cls of getClasses()) {
       for (const lecture of getLectures(cls.id)) {
         if (lecture.status === 'pending') pending.push({ classId: cls.id, lectureId: lecture.id });
@@ -102,7 +100,7 @@ export async function runQueue(onProgress = () => {}) {
         const transcript = readFileSync(transcriptPath, 'utf8');
         const { mergeSummaries } = await getSummarizer();
         const summary = await mergeSummaries([transcript], onProgress, () => {});
-        saveSummaryVersion(classId, lectureId, summary, SUMMARIZE_BACKEND);
+        saveSummaryVersion(classId, lectureId, summary, SUMMARIZE_BACKEND!);
 
         updateLectureMeta(classId, lectureId, {
           status: 'done',
@@ -112,14 +110,14 @@ export async function runQueue(onProgress = () => {}) {
         onProgress(`הושלם: ${lecture.name}`);
         console.log(`[pipeline] done: ${classId}/${lectureId}`);
 
-        const cls = getClasses().find(c => c.id === classId);
+        const cls = getClasses().find((c: any) => c.id === classId);
         sendLectureSummary({
           className: cls?.name || classId,
           lectureName: lecture.name,
           lectureDate: lecture.lectureDate,
           summaryContent: summary,
-        }).catch(err => console.warn('[email] failed to send:', err.message));
-      } catch (err) {
+        }).catch((err: any) => console.warn('[email] failed to send:', err.message));
+      } catch (err: any) {
         const aborted = controller.signal.aborted;
         if (aborted) console.log(`[pipeline] aborted: ${classId}/${lectureId}`);
         else console.error(`[pipeline] failed ${classId}/${lectureId}:`, err.message);
@@ -140,16 +138,16 @@ export async function runQueue(onProgress = () => {}) {
   }
 }
 
-// ── Full pipeline (detect + queue) — shared by cron and manual trigger ────────
+// ── Full pipeline (detect + queue) ────────────────────────────────────────────
 
-export async function runFullPipeline(onProgress = () => {}) {
+export async function runFullPipeline(onProgress = (_: string) => {}): Promise<{ found: number; queued: number }> {
   if (queueRunning) {
     onProgress('פייפליין כבר פועל');
     return { found: 0, queued: 0 };
   }
 
-  const classes = getClasses().filter(c => c.opalCourseUrl);
-  const foundLectures = [];
+  const classes = getClasses().filter((c: any) => c.opalCourseUrl);
+  const foundLectures: any[] = [];
 
   for (const cls of classes) {
     try {
@@ -159,7 +157,7 @@ export async function runFullPipeline(onProgress = () => {}) {
         createLecture(cls.id, lec);
         foundLectures.push({ className: cls.name, lectureName: lec.name, lectureDate: lec.lectureDate });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(`[pipeline] detect failed for ${cls.id}:`, err.message);
       onProgress(`שגיאה בזיהוי: ${cls.name} — ${err.message}`);
     }
@@ -168,7 +166,7 @@ export async function runFullPipeline(onProgress = () => {}) {
   onProgress(`נמצאו ${foundLectures.length} הרצאות חדשות`);
 
   if (foundLectures.length > 0) {
-    sendDetectionNotification(foundLectures).catch(err =>
+    sendDetectionNotification(foundLectures).catch((err: any) =>
       console.warn('[email] detection notification failed:', err.message)
     );
   }

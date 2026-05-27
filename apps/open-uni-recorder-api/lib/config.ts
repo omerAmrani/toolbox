@@ -1,6 +1,5 @@
 import { mkdirSync } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -19,9 +18,7 @@ export const {
   NOTIFY_EMAIL,
 } = process.env;
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const MERGE_MAX_TOKENS = 8192;
 
 export const TMP_DIR = path.join(__dirname, '..', 'tmp');
 mkdirSync(TMP_DIR, { recursive: true });
-

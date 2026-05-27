@@ -1,15 +1,15 @@
 import nodemailer from 'nodemailer';
 import { marked } from 'marked';
-import { GMAIL_USER, GMAIL_APP_PASSWORD, NOTIFY_EMAIL } from './config.js';
+import { GMAIL_USER, GMAIL_APP_PASSWORD, NOTIFY_EMAIL } from './config';
 
-function formatDate(isoDate) {
+function formatDate(isoDate?: string | null): string | null {
   if (!isoDate) return null;
   const [year, month, day] = isoDate.split('-');
   if (!year || !month || !day) return null;
   return `${day}/${month}/${year}`;
 }
 
-function isConfigured() {
+function isConfigured(): boolean {
   if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) {
     console.log('[email] skipping — GMAIL_USER / GMAIL_APP_PASSWORD / NOTIFY_EMAIL not configured');
     return false;
@@ -24,7 +24,7 @@ function createTransporter() {
   });
 }
 
-export async function sendDetectionNotification(found) {
+export async function sendDetectionNotification(found: { className: string; lectureName: string; lectureDate?: string }[]): Promise<void> {
   if (!isConfigured()) return;
 
   const rows = found.map(l => {
@@ -69,7 +69,7 @@ export async function sendDetectionNotification(found) {
   console.log(`[email] sent detection notification — ${found.length} lectures`);
 }
 
-export async function sendLectureSummary({ className, lectureName, lectureDate, summaryContent }) {
+export async function sendLectureSummary({ className, lectureName, lectureDate, summaryContent }: { className: string; lectureName: string; lectureDate?: string; summaryContent: string }): Promise<void> {
   if (!isConfigured()) return;
 
   const dateStr = formatDate(lectureDate) || formatDate(new Date().toISOString().slice(0, 10));

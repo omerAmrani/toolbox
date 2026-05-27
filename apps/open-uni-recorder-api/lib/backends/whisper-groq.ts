@@ -6,11 +6,11 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const WHISPER_PROMPT = process.env.WHISPER_PROMPT ||
   'הרצאה אקדמית. עשוי להכיל מונחים טכניים באנגלית.';
 
-async function waitMs(ms) {
+async function waitMs(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function transcribe(audioPath, retries = 5) {
+export async function transcribe(audioPath: string, retries = 5): Promise<{ text: string; segments: { startSec: number; text: string }[] }> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const fileStream = fs.createReadStream(audioPath);
@@ -22,17 +22,16 @@ export async function transcribe(audioPath, retries = 5) {
         timestamp_granularities: ['segment'],
         temperature: 0.0,
         prompt: WHISPER_PROMPT,
-      });
+      } as any);
 
-      const segments = (transcription.segments || []).map(seg => ({
+      const segments = ((transcription as any).segments || []).map((seg: any) => ({
         startSec: seg.start,
         text: seg.text.trim(),
       }));
 
-      const text = segments.map(s => s.text).join(' ');
+      const text = segments.map((s: any) => s.text).join(' ');
       return { text, segments };
-
-    } catch (err) {
+    } catch (err: any) {
       const isRateLimit = err?.status === 429 || err?.message?.includes('429');
       if (isRateLimit && attempt < retries) {
         const retryAfter = parseInt(err?.headers?.['retry-after'] || '0', 10);
@@ -44,4 +43,5 @@ export async function transcribe(audioPath, retries = 5) {
       throw err;
     }
   }
+  throw new Error('Max retries exceeded');
 }
