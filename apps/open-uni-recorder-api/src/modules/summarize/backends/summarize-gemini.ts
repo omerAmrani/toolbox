@@ -1,15 +1,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { buildPrompt, summarizeChunk, TRUNCATION_WARNING } from './prompt';
-import { MERGE_MAX_TOKENS } from '../../../config';
+import { MERGE_MAX_TOKENS, GEMINI_MODEL, GEMINI_API_KEY } from '../../../config';
 
 export { summarizeChunk };
 
-const MODEL = 'gemini-2.0-flash';
-
 function getModel() {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY not set in .env');
-  return new GoogleGenerativeAI(key).getGenerativeModel({ model: MODEL });
+  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set in .env');
+  return new GoogleGenerativeAI(GEMINI_API_KEY).getGenerativeModel({ model: GEMINI_MODEL! });
 }
 
 export async function mergeSummaries(chunks: string[], onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {

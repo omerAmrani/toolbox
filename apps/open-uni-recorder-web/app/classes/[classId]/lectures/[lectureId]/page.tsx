@@ -21,6 +21,7 @@ interface LectureMeta {
   status: string;
   whisperBackend?: string | null;
   summarizeBackend?: string | null;
+  summarizeModel?: string | null;
   summarizedAt?: string | null;
   currentSummary?: string | null;
 }
@@ -29,6 +30,7 @@ interface SummaryVersion {
   id: string;
   date: string;
   backend: string;
+  model?: string | null;
 }
 
 interface SummaryHistory {
@@ -56,7 +58,7 @@ export default function LecturePage() {
   const [qa, setQa] = useState<QAState | null>(null);
   const [qaSubmitting, setQaSubmitting] = useState(false);
   const [qaAnswers, setQaAnswers] = useState<string[]>([]);
-  const [backend, setBackend] = useState<Backend>('gemini');
+  const [backend, setBackend] = useState<Backend>('claude');
   const [jobActive, setJobActive] = useState(false);
   const [currentJobType, setCurrentJobType] = useState<JobType | null>(null);
   const [actionLabel, setActionLabel] = useState('🔄 סכם מחדש');
@@ -421,12 +423,13 @@ export default function LecturePage() {
             {summary ? (
               <div
                 className="summary-body"
+                data-testid="summary-body"
                 dangerouslySetInnerHTML={{ __html: marked.parse(summary) as string }}
               />
             ) : (
               <div className="no-summary">
                 <p>אין סיכום עדיין</p>
-                <button className="btn" onClick={runSummarize}>
+                <button className="btn" data-testid="summarize-btn" onClick={runSummarize}>
                   ▶ סכם עכשיו
                 </button>
               </div>
@@ -478,7 +481,9 @@ export default function LecturePage() {
                           </span>
                         )}
                         <span className="history-date">{date}</span>
-                        <span className="history-backend">{v.backend}</span>
+                        <span className="history-backend">
+                          {v.backend}{v.model ? ` · ${v.model}` : ''}
+                        </span>
                       </div>
                       <div className="history-item-actions">
                         <button
@@ -569,7 +574,11 @@ export default function LecturePage() {
             </div>
             <div className="meta-item">
               <div className="meta-label">סיכום</div>
-              <div className="meta-value">{lecture?.summarizeBackend || '—'}</div>
+              <div className="meta-value">
+                {lecture?.summarizeBackend
+                  ? `${lecture.summarizeBackend}${lecture.summarizeModel ? ` · ${lecture.summarizeModel}` : ''}`
+                  : '—'}
+              </div>
             </div>
             <div className="meta-item">
               <div className="meta-label">תאריך סיכום</div>

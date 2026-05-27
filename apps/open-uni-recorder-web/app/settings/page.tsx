@@ -61,7 +61,7 @@ interface SyncSection {
   newLectures: NewLecture[];
 }
 
-type ModelKey = 'gemini' | 'groq' | 'claude' | 'ollama';
+type ModelKey = 'gemini' | 'claude';
 type ModelStatus = 'idle' | 'testing' | 'ok' | 'error' | 'warning';
 
 interface ModelState {
@@ -80,9 +80,7 @@ function fmtDate(iso?: string | null): string {
 
 const MODELS: { key: ModelKey; icon: string; name: string; sub: string }[] = [
   { key: 'gemini', icon: '🌟', name: 'Gemini', sub: 'Google · gemini-2.0-flash' },
-  { key: 'groq', icon: '⚡', name: 'Groq', sub: 'LLaMA 3.3 70B · Groq Cloud' },
-  { key: 'claude', icon: '🤖', name: 'Claude', sub: 'Anthropic · claude-sonnet-4-6' },
-  { key: 'ollama', icon: '🦙', name: 'Ollama', sub: 'מקומי · localhost:11434' },
+  { key: 'claude', icon: '🤖', name: 'Claude', sub: 'Anthropic · claude-haiku-4-5-20251001' },
 ];
 
 export default function SettingsPage() {
@@ -126,9 +124,7 @@ export default function SettingsPage() {
   // Model tests
   const [models, setModels] = useState<Record<ModelKey, ModelState>>({
     gemini: { status: 'idle', msg: 'לא נבדק' },
-    groq: { status: 'idle', msg: 'לא נבדק' },
     claude: { status: 'idle', msg: 'לא נבדק' },
-    ollama: { status: 'idle', msg: 'לא נבדק' },
   });
 
   const loadDataDir = useCallback(async () => {

@@ -346,7 +346,7 @@ export default function ClassDetailPage() {
       );
     } else if (l.status === 'pending') {
       btns.push(
-        <button key="run" className="btn btn-sm" onClick={() => runPipeline(l.id)}>
+        <button key="run" className="btn btn-sm" data-testid="run-pipeline-btn" onClick={() => runPipeline(l.id)}>
           ▶ סכם
         </button>,
       );
@@ -395,6 +395,7 @@ export default function ClassDetailPage() {
       <button
         key="delete"
         className="btn btn-sm btn-danger"
+        data-testid="delete-lecture-btn"
         onClick={() => deleteLecture(l.id)}
       >
         🗑
@@ -483,7 +484,7 @@ export default function ClassDetailPage() {
             <h2>הרצאות</h2>
             <div className="header-actions">
               <BackendSelect value={backend} onChange={setBackend} />
-              <button className="btn" onClick={() => setAddOpen(true)}>
+              <button className="btn" data-testid="add-lecture-btn" onClick={() => setAddOpen(true)}>
                 + הוסף הרצאה
               </button>
             </div>
@@ -516,7 +517,7 @@ export default function ClassDetailPage() {
                     : '—';
                   const job = running.get(l.id);
                   return (
-                    <tr key={l.id}>
+                    <tr key={l.id} data-testid="lecture-row">
                       <td className="td-date">{date}</td>
                       <td>
                         <Link
@@ -553,6 +554,7 @@ export default function ClassDetailPage() {
           <input
             type="text"
             className="form-input"
+            data-testid="lecture-name-input"
             placeholder="למשל: הרצאה 3 — מבוא ל-ANOVA"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -563,6 +565,7 @@ export default function ClassDetailPage() {
           <input
             type="url"
             className="form-input"
+            data-testid="lecture-url-input"
             dir="ltr"
             placeholder="https://opal.openu.ac.il/..."
             value={newUrl}
@@ -583,7 +586,7 @@ export default function ClassDetailPage() {
           <button className="btn btn-outline" onClick={() => setAddOpen(false)}>
             ביטול
           </button>
-          <button className="btn" onClick={addLecture}>
+          <button className="btn" data-testid="add-lecture-submit" onClick={addLecture}>
             הוסף
           </button>
         </div>

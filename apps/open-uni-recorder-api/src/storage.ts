@@ -133,13 +133,13 @@ export function summariesDirPath(classId: string, lectureId: string): string {
 }
 
 // ── Summary versions ──────────────────────────────────────────────────────────
-export function saveSummaryVersion(classId: string, lectureId: string, content: string, backend: string): string {
+export function saveSummaryVersion(classId: string, lectureId: string, content: string, backend: string, model?: string): string {
   const summariesDir = summariesDirPath(classId, lectureId);
   mkdirSync(summariesDir, { recursive: true });
   const id = String(Date.now());
   writeFileSync(path.join(summariesDir, `${id}.md`), content);
-  db.prepare('INSERT INTO summaries (id, lectureId, date, backend) VALUES (?, ?, ?, ?)')
-    .run(id, lectureId, new Date().toISOString(), backend);
+  db.prepare('INSERT INTO summaries (id, lectureId, date, backend, model) VALUES (?, ?, ?, ?, ?)')
+    .run(id, lectureId, new Date().toISOString(), backend, model ?? null);
   db.prepare('UPDATE lectures SET currentSummary = ? WHERE id = ?').run(id, lectureId);
   const updated = getLecture(classId, lectureId);
   if (updated) {
@@ -152,7 +152,7 @@ export function getSummaryVersions(classId: string, lectureId: string): any {
   const lecture = getLecture(classId, lectureId);
   if (!lecture) return { versions: [], currentSummary: null };
   const versions = db.prepare(
-    'SELECT id, date, backend FROM summaries WHERE lectureId = ? ORDER BY id DESC'
+    'SELECT id, date, backend, model FROM summaries WHERE lectureId = ? ORDER BY id DESC'
   ).all(lectureId);
   return { versions, currentSummary: lecture.currentSummary };
 }

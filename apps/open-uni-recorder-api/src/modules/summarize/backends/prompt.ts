@@ -3,16 +3,15 @@ export const TRUNCATION_WARNING = '\n\n---\n⚠️ **סיכום קוצר עקב 
 export function buildPrompt(transcript: string): string {
   return `Always respond in Hebrew. Technical terms may remain in English.
 
-You are an academic lecture summarizer for a student. Summarize the following lecture transcript fully and thoroughly — do not cut content short.
+Summarize the following lecture in chronological order, section by section as it was taught.
+Your summary should be 2–3 pages long (roughly 1000–1500 words).
 
-The summary must include these sections:
+For each section use this format:
+**[timestamp] Subject title**
+- Sub-topic: 2–4 sentences covering the key idea. Bold any concept or term name the first time it appears, e.g. **רקורסיה**
+- Example (if given): brief description of what it illustrates
 
-1. **נושאים מרכזיים** — each topic covered with a clear explanation
-2. **מושגים והגדרות** — every important term with its exact definition
-3. **דוגמאות** — examples the lecturer gave, with context
-4. **מסקנות** — key points to remember for the exam
-
-For each point, cite the relevant timestamp from the transcript. Timestamps appear every minute in [HH:MM] format (e.g. [00:05]).
+Skip filler, repetition, and admin announcements.
 
 Transcript:
 ${transcript}`;

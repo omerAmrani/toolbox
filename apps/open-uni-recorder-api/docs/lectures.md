@@ -31,7 +31,7 @@ Also: `failed`, `aborted`, `skipped`, `error`. Retry resets `failed` → `pendin
 
 **Summarize (SSE):** `POST .../summarize`
 - reads `transcript.txt` → summarizes via backend → saves versioned summary → sets as current
-- Body: `{ backend: 'gemini' | 'groq' | 'claude' | 'ollama' }` overrides config default
+- Body: `{ backend: 'gemini' | 'claude' }` overrides config default
 
 **SSE event shapes:**
 - `{ type: 'progress', step, message }`

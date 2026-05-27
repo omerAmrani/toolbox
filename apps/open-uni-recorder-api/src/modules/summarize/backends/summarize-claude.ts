@@ -1,15 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { buildPrompt, summarizeChunk, TRUNCATION_WARNING } from './prompt';
-import { MERGE_MAX_TOKENS } from '../../../config';
+import { MERGE_MAX_TOKENS, CLAUDE_MODEL, ANTHROPIC_API_KEY } from '../../../config';
 
 export { summarizeChunk };
 
-const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
-
 function getClient(): Anthropic {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY not set in .env');
-  return new Anthropic({ apiKey: key });
+  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set in .env');
+  return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 }
 
 export async function mergeSummaries(chunks: string[], onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {
@@ -20,7 +17,7 @@ export async function mergeSummaries(chunks: string[], onProgress = (_: string) 
 
   if (onToken) {
     const stream = client.messages.stream({
-      model: MODEL,
+      model: CLAUDE_MODEL!,
       max_tokens: MERGE_MAX_TOKENS,
       messages: [{ role: 'user', content: buildPrompt(fullTranscript) }],
     });
@@ -41,7 +38,7 @@ export async function mergeSummaries(chunks: string[], onProgress = (_: string) 
   }
 
   const response = await client.messages.create({
-    model: MODEL,
+    model: CLAUDE_MODEL!,
     max_tokens: MERGE_MAX_TOKENS,
     messages: [{ role: 'user', content: buildPrompt(fullTranscript) }],
   });

@@ -9,9 +9,7 @@ Tests AI backend connectivity and latency. Used by the settings page to verify A
 
 Routes:
 - `GET /api/health/gemini`
-- `GET /api/health/groq`
 - `GET /api/health/claude`
-- `GET /api/health/ollama`
 
 Response: `{ ok: boolean, configured: boolean, ms?: number, response?: string, error?: string }`
 

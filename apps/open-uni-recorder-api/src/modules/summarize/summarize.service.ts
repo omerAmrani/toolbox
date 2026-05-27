@@ -10,15 +10,13 @@ export interface SummarizerBackend {
 
 const backends: Record<string, () => Promise<SummarizerBackend>> = {
   gemini: () => import('./backends/summarize-gemini'),
-  groq:   () => import('./backends/summarize-groq'),
-  ollama: () => import('./backends/summarize-ollama'),
   claude: () => import('./backends/summarize-claude'),
 };
 
 @Injectable()
 export class SummarizeService {
   async getSummarizer(backend?: string): Promise<SummarizerBackend> {
-    const load = backends[backend!] ?? backends[SUMMARIZE_BACKEND!] ?? backends.ollama;
+    const load = backends[backend!] ?? backends[SUMMARIZE_BACKEND!] ?? backends.gemini;
     return load();
   }
 

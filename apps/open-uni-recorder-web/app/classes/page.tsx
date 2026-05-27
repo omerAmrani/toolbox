@@ -103,7 +103,7 @@ export default function ClassesPage() {
         <div className="card">
           <div className="card-header">
             <h2>קורסים</h2>
-            <button className="btn" onClick={() => setModalOpen(true)}>
+            <button className="btn" data-testid="create-class-btn" onClick={() => setModalOpen(true)}>
               + קורס חדש
             </button>
           </div>
@@ -127,10 +127,12 @@ export default function ClassesPage() {
                 <div
                   key={c.id}
                   className="class-card"
+                  data-testid="class-card"
                   onClick={() => router.push(`/classes/${c.id}`)}
                 >
                   <button
                     className="class-delete"
+                    data-testid="class-delete-btn"
                     onClick={(e) => deleteClass(e, c.id)}
                     title="מחק קורס"
                   >
@@ -154,6 +156,7 @@ export default function ClassesPage() {
             ref={nameInputRef}
             type="text"
             className="form-input"
+            data-testid="class-name-input"
             placeholder="למשל: סטטיסטיקה 101"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -192,7 +195,7 @@ export default function ClassesPage() {
           <button className="btn btn-outline" onClick={closeModal}>
             ביטול
           </button>
-          <button className="btn" onClick={createClass}>
+          <button className="btn" data-testid="class-submit-btn" onClick={createClass}>
             צור קורס
           </button>
         </div>

@@ -11,7 +11,7 @@ export function StatusBadge({ status, message, spinner }: Props) {
   const cls = STATUS_CLASS[status] || 'badge-pending';
   const label = message ?? STATUS_LABEL[status] ?? status;
   return (
-    <span className={`badge ${cls}`}>
+    <span className={`badge ${cls}`} data-testid="status-badge" data-status={status}>
       {spinner && <span className="spinner-sm" />}
       {label}
     </span>

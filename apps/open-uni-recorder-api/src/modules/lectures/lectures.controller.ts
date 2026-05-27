@@ -8,7 +8,7 @@ import { StorageService } from '../storage/storage.service';
 import { DownloadService } from '../download/download.service';
 import { SummarizeService } from '../summarize/summarize.service';
 import { QaService } from '../qa/qa.service';
-import { WHISPER_BACKEND, WHISPER_MODEL, SUMMARIZE_BACKEND } from '../../config';
+import { WHISPER_BACKEND, WHISPER_MODEL, SUMMARIZE_BACKEND, GEMINI_MODEL, CLAUDE_MODEL } from '../../config';
 
 @Controller('api/classes')
 export class LecturesController {
@@ -265,6 +265,7 @@ export class LecturesController {
     this.lecturesService.activeJobs.set(key, job);
 
     try {
+      console.log(`[summarize] starting: ${classId}/${lectureId} backend=${usedBackend}`);
       this.storage.updateLectureMeta(classId, lectureId, { status: 'summarizing' });
       const { mergeSummaries } = await this.summarizeService.getSummarizer(backend);
       const transcript = readFileSync(transcriptPath, 'utf8');
@@ -279,16 +280,22 @@ export class LecturesController {
         controller.signal,
       );
 
-      this.storage.saveSummaryVersion(classId, lectureId, summary, usedBackend!);
+      const modelMap: Record<string, string | undefined> = { gemini: GEMINI_MODEL, claude: CLAUDE_MODEL };
+      const usedModel = modelMap[usedBackend!];
+      this.storage.saveSummaryVersion(classId, lectureId, summary, usedBackend!, usedModel);
       this.storage.updateLectureMeta(classId, lectureId, {
         status: 'summarized',
         summarizedAt: new Date().toISOString(),
         summarizeBackend: usedBackend,
+        summarizeModel: usedModel,
       });
 
+      console.log(`[summarize] done: ${classId}/${lectureId}`);
       send({ type: 'done', summary, status: 'summarized' });
     } catch (err: any) {
       const aborted = controller.signal.aborted;
+      if (aborted) console.log(`[summarize] aborted: ${classId}/${lectureId}`);
+      else console.error(`[summarize] error: ${classId}/${lectureId}`, err.message);
       this.storage.updateLectureMeta(classId, lectureId, { status: aborted ? 'aborted' : 'error' });
       send({ type: aborted ? 'aborted' : 'error', message: err.message });
     } finally {

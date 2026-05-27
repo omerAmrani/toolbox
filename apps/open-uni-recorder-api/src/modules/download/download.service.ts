@@ -4,9 +4,9 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { chromium } from 'playwright';
 import { WhisperService } from '../whisper/whisper.service';
-import { TMP_DIR, OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID } from '../../config';
+import { TMP_DIR, OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID, WHISPER_CONCURRENCY } from '../../config';
 
-const CONCURRENCY = parseInt(process.env.WHISPER_CONCURRENCY || '2', 10);
+const CONCURRENCY = parseInt(WHISPER_CONCURRENCY, 10);
 const CHUNK_SECS = 600;
 const TIMESTAMP_INTERVAL_SECS = 60;
 

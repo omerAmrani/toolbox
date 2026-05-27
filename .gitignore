@@ -39,6 +39,7 @@ yarn-error.log*
 # Data / DB (personal data, large binaries)
 recorder-db/
 apps/recorder-db/
+temp-db/
 
 # Misc
 .DS_Store

@@ -4,7 +4,9 @@ import { mkdirSync } from 'fs';
 import { getSettings } from '../settings';
 
 const DEFAULT_DATA_DIR = path.resolve(__dirname, '..', '..', 'recorder-db');
-export const DATA_DIR: string = getSettings().dataDir || DEFAULT_DATA_DIR;
+const TEST_DATA_DIR = path.resolve(__dirname, '..', '..', 'temp-db');
+export const DATA_DIR: string =
+  process.env.NODE_ENV === 'test' ? TEST_DATA_DIR : (getSettings().dataDir || DEFAULT_DATA_DIR);
 export const CLASSES_DIR: string = path.join(DATA_DIR, 'classes');
 
 mkdirSync(DATA_DIR, { recursive: true });
@@ -47,8 +49,11 @@ db.exec(`
     id TEXT PRIMARY KEY,
     lectureId TEXT NOT NULL REFERENCES lectures(id),
     date TEXT NOT NULL,
-    backend TEXT NOT NULL
+    backend TEXT NOT NULL,
+    model TEXT
   );
 `);
+
+try { db.exec('ALTER TABLE summaries ADD COLUMN model TEXT'); } catch (_) {}
 
 export default db;

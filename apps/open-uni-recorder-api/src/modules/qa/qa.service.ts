@@ -1,20 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import Anthropic from '@anthropic-ai/sdk';
-
-const MODEL = 'claude-haiku-4-5-20251001';
+import { ANTHROPIC_API_KEY, CLAUDE_MODEL } from '../../config';
 
 @Injectable()
 export class QaService {
   private getClient(): Anthropic {
-    const key = process.env.ANTHROPIC_API_KEY;
-    if (!key) throw new Error('ANTHROPIC_API_KEY לא מוגדר ב-.env');
-    return new Anthropic({ apiKey: key });
+    if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY לא מוגדר ב-.env');
+    return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
   }
 
   async generateQuestions(summaryContent: string): Promise<string[]> {
     const client = this.getClient();
     const response = await client.messages.create({
-      model: MODEL,
+      model: CLAUDE_MODEL!,
       max_tokens: 1024,
       messages: [{
         role: 'user',
@@ -40,7 +38,7 @@ ${summaryContent}`,
     ).join('\n\n');
 
     const response = await client.messages.create({
-      model: MODEL,
+      model: CLAUDE_MODEL!,
       max_tokens: 1024,
       messages: [{
         role: 'user',

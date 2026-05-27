@@ -1,6 +1,6 @@
 'use client';
 
-export type Backend = 'gemini' | 'groq' | 'claude' | 'ollama';
+export type Backend = 'gemini' | 'claude';
 
 interface Props {
   value: Backend;
@@ -12,9 +12,7 @@ export function BackendSelect({ value, onChange, className = 'select-field' }: P
   return (
     <select className={className} value={value} onChange={(e) => onChange(e.target.value as Backend)}>
       <option value="gemini">Gemini (Google)</option>
-      <option value="groq">Groq (LLaMA)</option>
       <option value="claude">Claude (Anthropic)</option>
-      <option value="ollama">Ollama (מקומי)</option>
     </select>
   );
 }

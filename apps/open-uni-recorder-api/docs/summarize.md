@@ -16,9 +16,9 @@ Generates an AI summary from a lecture transcript. Supports multiple backends an
 
 **Backends** (set via `SUMMARIZE_BACKEND`, overridable per-request with `{ backend }`):
 - `gemini` — Google Gemini 2.0 Flash (requires `GEMINI_API_KEY`)
-- `groq` — LLaMA 3.3 70B via Groq Cloud (requires `GROQ_API_KEY`)
-- `claude` — Anthropic Claude Sonnet (requires `ANTHROPIC_API_KEY`)
-- `ollama` — local Ollama instance at `localhost:11434`
+- `claude` — Anthropic Claude (`claude-haiku-4-5-20251001`, requires `ANTHROPIC_API_KEY`) — **default**; ~$0.0008 per summary
+
+> **Default model:** `claude-haiku-4-5-20251001` — fast, cost-effective (~0.08¢ per lecture summary).
 
 **Versions:** each run appends a new version entry. `currentSummary` on the lecture points to the active one. Old versions can be switched to or deleted via the summaries routes.
 

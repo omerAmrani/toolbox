@@ -1,10 +1,8 @@
 import Groq from 'groq-sdk';
 import fs from 'fs';
+import { GROQ_API_KEY, WHISPER_PROMPT } from '../../../config';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-const WHISPER_PROMPT = process.env.WHISPER_PROMPT ||
-  'הרצאה אקדמית. עשוי להכיל מונחים טכניים באנגלית.';
+const groq = new Groq({ apiKey: GROQ_API_KEY });
 
 async function waitMs(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
