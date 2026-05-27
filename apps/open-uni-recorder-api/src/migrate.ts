@@ -1,11 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import db, { CLASSES_DIR } from './db.js';
+import db, { CLASSES_DIR } from './db';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-export function reloadFromDisk() {
+export function reloadFromDisk(): { classes: number; lectures: number } {
   if (!existsSync(CLASSES_DIR)) return { classes: 0, lectures: 0 };
 
   let classCount = 0, lectureCount = 0;
@@ -15,7 +12,7 @@ export function reloadFromDisk() {
     const metaPath = path.join(CLASSES_DIR, classId, 'meta.json');
     if (!existsSync(metaPath)) continue;
 
-    let classMeta;
+    let classMeta: any;
     try { classMeta = JSON.parse(readFileSync(metaPath, 'utf8')); } catch { continue; }
 
     db.prepare(
@@ -31,7 +28,7 @@ export function reloadFromDisk() {
       const lMetaPath = path.join(lecturesDir, lectureId, 'meta.json');
       if (!existsSync(lMetaPath)) continue;
 
-      let m;
+      let m: any;
       try { m = JSON.parse(readFileSync(lMetaPath, 'utf8')); } catch { continue; }
 
       db.prepare(

@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildPrompt, summarizeChunk } from './prompt.js';
-import { MERGE_MAX_TOKENS } from '../config.js';
+import { buildPrompt, summarizeChunk } from './prompt';
+import { MERGE_MAX_TOKENS } from '../config';
 
 export { summarizeChunk };
 
@@ -12,7 +12,7 @@ function getModel() {
   return new GoogleGenerativeAI(key).getGenerativeModel({ model: MODEL });
 }
 
-export async function mergeSummaries(chunks, onProgress = () => {}, onToken = null) {
+export async function mergeSummaries(chunks: string[], onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {
   const fullTranscript = chunks.join('\n\n');
   onProgress('מסכם עם Gemini...');
 

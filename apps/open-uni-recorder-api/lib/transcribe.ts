@@ -1,10 +1,10 @@
-import { transcribe as transcribeCpp } from './backends/whisper-cpp.js';
-import { transcribe as transcribeGroq } from './backends/whisper-groq.js';
-import { WHISPER_MODEL, WHISPER_BACKEND } from './config.js';
+import { transcribe as transcribeCpp } from './backends/whisper-cpp';
+import { transcribe as transcribeGroq } from './backends/whisper-groq';
+import { WHISPER_MODEL, WHISPER_BACKEND } from './config';
 
 const useGroq = WHISPER_BACKEND === 'groq-whisper' || WHISPER_BACKEND === 'openai-whisper-js';
 
-export async function transcribe(audioPath, onProgress = () => {}) {
+export async function transcribe(audioPath: string, onProgress = (_: string) => {}): Promise<{ text: string; segments: any[] }> {
   if (useGroq) {
     onProgress('מתמלל עם Groq Whisper API...');
     console.log('🎙️   Transcribing with groq-whisper...');
@@ -13,7 +13,7 @@ export async function transcribe(audioPath, onProgress = () => {}) {
       const normalised = typeof result === 'string' ? { text: result, segments: [] } : result;
       console.log(`✅  Transcribed ${normalised.text.split(' ').length} words (${normalised.segments.length} segments)`);
       return normalised;
-    } catch (err) {
+    } catch (err: any) {
       const isRateLimit = err?.status === 429 || err?.message?.includes('429');
       if (isRateLimit) {
         console.warn('[groq-whisper] Rate limit exhausted — falling back to local whisper-cpp...');

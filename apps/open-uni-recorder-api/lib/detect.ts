@@ -1,8 +1,8 @@
 import { chromium } from 'playwright';
-import { OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID } from './config.js';
-import { getClass, getLectures } from '../src/storage.js';
+import { OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID } from './config';
+import { getClass, getLectures } from '../src/storage';
 
-async function loginToOpal(browser, onProgress) {
+async function loginToOpal(browser: any, onProgress: (msg: string) => void): Promise<any> {
   const context = await browser.newContext();
   const page = await context.newPage();
   page.setDefaultTimeout(30000);
@@ -27,7 +27,7 @@ async function loginToOpal(browser, onProgress) {
   return page;
 }
 
-export async function detectNewLectures(classId, onProgress = () => {}) {
+export async function detectNewLectures(classId: string, onProgress = (_: string) => {}): Promise<any[]> {
   const cls = getClass(classId);
   if (!cls) throw new Error(`Class not found: ${classId}`);
   if (!cls.opalCourseUrl) throw new Error(`אין קישור OPAL לקורס "${cls.name}"`);
@@ -35,7 +35,7 @@ export async function detectNewLectures(classId, onProgress = () => {}) {
   const existing = getLectures(classId);
   const knownIds = new Set(
     existing
-      .map(l => { try { return new URL(l.url).searchParams.get('v'); } catch { return null; } })
+      .map((l: any) => { try { return new URL(l.url).searchParams.get('v'); } catch { return null; } })
       .filter(Boolean)
   );
 
@@ -47,7 +47,8 @@ export async function detectNewLectures(classId, onProgress = () => {}) {
     await page.goto(cls.opalCourseUrl, { waitUntil: 'networkidle', timeout: 40000 });
 
     const found = await page.evaluate(() => {
-      return [...document.querySelectorAll('div.ovc_playlist[id^="playlist"]')].map(div => {
+      const doc = (globalThis as any).document;
+      return [...doc.querySelectorAll('div.ovc_playlist[id^="playlist"]')].map((div: any) => {
         const rawId = div.id.replace('playlist', '');
         const titleEl = div.querySelector('.ovc_playlist_title');
         const dateEl = div.querySelector('.pl_recorddate');
@@ -60,12 +61,12 @@ export async function detectNewLectures(classId, onProgress = () => {}) {
     });
 
     const newLectures = found
-      .filter(l => l.vId && !knownIds.has(l.vId))
-      .map(l => {
-        let lectureDate = null;
+      .filter((l: any) => l.vId && !knownIds.has(l.vId))
+      .map((l: any) => {
+        let lectureDate: string | null = null;
         if (l.recordDate) {
           const [day, month, year] = l.recordDate.split('/');
-          if (day && month && year) lectureDate = `${year}-${month.padStart(2,'0')}-${day.padStart(2,'0')}`;
+          if (day && month && year) lectureDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
         }
         return {
           name: l.name,

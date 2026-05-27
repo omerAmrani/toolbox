@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync } from 'fs';
 import { nodewhisper } from 'nodejs-whisper';
-import { WHISPER_MODEL } from '../config.js';
+import { WHISPER_MODEL } from '../config';
 
 const silentLogger = { debug: () => {}, log: () => {}, error: () => {}, warn: () => {} };
 
@@ -8,7 +8,9 @@ let suppressCount = 0;
 const realStdout = process.stdout.write.bind(process.stdout);
 const realStderr = process.stderr.write.bind(process.stderr);
 
-function parseSrt(content) {
+interface Segment { startSec: number; text: string }
+
+function parseSrt(content: string): Segment[] {
   const blocks = content.trim().split(/\n\n+/);
   return blocks.flatMap(block => {
     const lines = block.split('\n');
@@ -20,13 +22,13 @@ function parseSrt(content) {
   });
 }
 
-export async function transcribe(audioPath) {
+export async function transcribe(audioPath: string): Promise<{ text: string; segments: Segment[] }> {
   if (suppressCount === 0) {
     process.stdout.write = () => true;
     process.stderr.write = () => true;
   }
   suppressCount++;
-  console.log = (...args) => realStdout(args.join(' ') + '\n');
+  console.log = (...args: any[]) => realStdout(args.join(' ') + '\n');
   try {
     console.log(`  [whisper-cpp] starting nodewhisper for ${audioPath}`);
     await nodewhisper(audioPath, {
@@ -35,7 +37,7 @@ export async function transcribe(audioPath) {
       removeWavFileAfterTranscription: false,
       whisperOptions: { outputInSrt: true, language: 'he' },
       logger: silentLogger,
-    });
+    } as any);
     console.log(`  [whisper-cpp] nodewhisper resolved for ${audioPath}`);
   } finally {
     suppressCount--;

@@ -1,21 +1,21 @@
 import Groq from 'groq-sdk';
-import { OUTPUT_LANG } from '../config.js';
+import { OUTPUT_LANG } from '../config';
 
 const CHUNK_MODEL = process.env.GROQ_CHUNK_MODEL || 'llama-3.1-8b-instant';
 const MERGE_MODEL = process.env.GROQ_MERGE_MODEL || 'llama-3.3-70b-versatile';
 
-function getClient() {
+function getClient(): Groq {
   const key = process.env.GROQ_API_KEY;
   if (!key) throw new Error('GROQ_API_KEY not set in .env');
   return new Groq({ apiKey: key });
 }
 
-function systemPrompt() {
+function systemPrompt(): string {
   const lang = OUTPUT_LANG === 'he' ? 'Hebrew' : 'English';
   return `You are an expert academic summarizer. You MUST always respond in ${lang}. Never respond in any other language.`;
 }
 
-function buildChunkPrompt(transcript) {
+function buildChunkPrompt(transcript: string): string {
   const summaryLang = OUTPUT_LANG === 'he' ? 'עברית' : 'English';
   return `אתה עוזר סטודנט המסכם הרצאות אקדמיות. סכם את תמלול ההרצאה הבא ב${summaryLang}.
 
@@ -36,7 +36,7 @@ ${transcript}
 כתוב סיכום תמציתי של עד 400 מילה בלבד. התמקד אך ורק בנקודות העיקריות של קטע זה. אל תחזור על מידע שכבר ידוע. אל תוסיף כותרות — רק פסקאות קצרות.`;
 }
 
-function buildMergePrompt(summaries) {
+function buildMergePrompt(summaries: string[]): string {
   const summaryLang = OUTPUT_LANG === 'he' ? 'עברית' : 'English';
   const combined = summaries.map((s, i) => `[חלק ${i + 1}]\n${s}`).join('\n\n---\n\n');
   return `להלן סיכומים של חלקים עוקבים מאותה הרצאה. צור סיכום מאוחד ומלא ב${summaryLang}.
@@ -49,9 +49,9 @@ function buildMergePrompt(summaries) {
 ${combined}`;
 }
 
-async function callGroq(text, { model, maxTokens, onToken = null } = {}) {
+async function callGroq(text: string, { model, maxTokens, onToken = null }: { model: string; maxTokens: number; onToken?: ((t: string) => void) | null }): Promise<string> {
   const groq = getClient();
-  const messages = [
+  const messages: any[] = [
     { role: 'system', content: systemPrompt() },
     { role: 'user', content: text },
   ];
@@ -65,7 +65,7 @@ async function callGroq(text, { model, maxTokens, onToken = null } = {}) {
       stream: true,
     });
     let full = '';
-    let finishReason = null;
+    let finishReason: string | null = null;
     for await (const chunk of stream) {
       const token = chunk.choices[0]?.delta?.content || '';
       const fr = chunk.choices[0]?.finish_reason;
@@ -94,15 +94,14 @@ async function callGroq(text, { model, maxTokens, onToken = null } = {}) {
     console.warn('[summarize] WARNING: output was truncated by token limit.');
     return choice.message.content + warning;
   }
-  return choice.message.content;
+  return choice.message.content!;
 }
 
-// Hebrew tokenizes ~1 char per token in LLaMA. Leave headroom for prompt template + output.
 const MAX_CHUNK_CHARS = 8000;
 
-function splitText(text) {
+function splitText(text: string): string[] {
   if (text.length <= MAX_CHUNK_CHARS) return [text];
-  const chunks = [];
+  const chunks: string[] = [];
   let i = 0;
   while (i < text.length) {
     let end = i + MAX_CHUNK_CHARS;
@@ -116,12 +115,11 @@ function splitText(text) {
   return chunks;
 }
 
-export function summarizeChunk(chunkText) {
+export function summarizeChunk(chunkText: string): Promise<string> {
   return callGroq(buildChunkPrompt(chunkText), { model: CHUNK_MODEL, maxTokens: 600 });
 }
 
-export async function mergeSummaries(summaries, onProgress = () => {}, onToken = null) {
-  // If a single large transcript was passed (e.g. from regenerate), split it first
+export async function mergeSummaries(summaries: string[], onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {
   if (summaries.length === 1) {
     const parts = splitText(summaries[0]);
     if (parts.length > 1) {
