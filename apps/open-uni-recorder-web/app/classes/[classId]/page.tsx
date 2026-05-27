@@ -4,16 +4,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
-import {
-  SEMESTER_HE,
-  STATUS_LABEL,
-  STATUS_CLASS,
-  STATUS_ABORT_TYPE,
-} from '@/lib/status';
+import { SEMESTER_HE, STATUS_ABORT_TYPE } from '@/lib/status';
+import type { Backend } from '@/app/components/BackendSelect';
 import { streamSSE } from '@/lib/sse';
 import { PageHeader } from '@/app/components/PageHeader';
 import { Modal } from '@/app/components/Modal';
 import { useToast } from '@/app/components/Toast';
+import { StatusBadge } from '@/app/components/StatusBadge';
+import { BackendSelect } from '@/app/components/BackendSelect';
+import { EmptyState } from '@/app/components/EmptyState';
 
 interface ClassInfo {
   id: string;
@@ -40,8 +39,6 @@ interface JobState {
   message: string;
   type: 'transcribe' | 'summarize' | null;
 }
-
-type Backend = 'gemini' | 'groq' | 'claude' | 'ollama';
 
 export default function ClassDetailPage() {
   const params = useParams<{ classId: string }>();
@@ -485,36 +482,21 @@ export default function ClassDetailPage() {
           <div className="card-header">
             <h2>הרצאות</h2>
             <div className="header-actions">
-              <select
-                className="select-field"
-                value={backend}
-                onChange={(e) => setBackend(e.target.value as Backend)}
-              >
-                <option value="gemini">Gemini</option>
-                <option value="groq">Groq</option>
-                <option value="claude">Claude</option>
-                <option value="ollama">Ollama</option>
-              </select>
+              <BackendSelect value={backend} onChange={setBackend} />
               <button className="btn" onClick={() => setAddOpen(true)}>
                 + הוסף הרצאה
               </button>
             </div>
           </div>
 
-          {lectures === null && (
-            <div className="empty-state">
-              <p>טוען...</p>
-            </div>
-          )}
+          {lectures === null && <EmptyState message="טוען..." loading />}
 
           {lectures?.length === 0 && (
-            <div className="empty-state">
-              <div className="icon">🎬</div>
-              <p>אין הרצאות עדיין</p>
+            <EmptyState message="אין הרצאות עדיין" icon="🎬">
               <button className="btn" onClick={() => setAddOpen(true)}>
                 + הוסף הרצאה ראשונה
               </button>
-            </div>
+            </EmptyState>
           )}
 
           {lectures && lectures.length > 0 && (
@@ -546,13 +528,9 @@ export default function ClassDetailPage() {
                       </td>
                       <td className="col-status">
                         {job ? (
-                          <span className="badge badge-pending">
-                            <span className="spinner-sm" /> {job.message}
-                          </span>
+                          <StatusBadge status={l.status} message={job.message} spinner />
                         ) : (
-                          <span className={`badge ${STATUS_CLASS[l.status] || 'badge-pending'}`}>
-                            {STATUS_LABEL[l.status] || l.status}
-                          </span>
+                          <StatusBadge status={l.status} />
                         )}
                       </td>
                       <td className="col-actions">

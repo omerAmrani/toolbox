@@ -5,10 +5,14 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { marked } from 'marked';
 import { apiUrl } from '@/lib/api';
-import { STATUS_LABEL, STATUS_CLASS } from '@/lib/status';
 import { streamSSE } from '@/lib/sse';
 import { PageHeader } from '@/app/components/PageHeader';
 import { useToast } from '@/app/components/Toast';
+import { StatusBadge } from '@/app/components/StatusBadge';
+import { BackendSelect } from '@/app/components/BackendSelect';
+import { QASection } from '@/app/components/QASection';
+import type { QAState } from '@/app/components/QASection';
+import type { Backend } from '@/app/components/BackendSelect';
 
 interface LectureMeta {
   id: string;
@@ -32,17 +36,6 @@ interface SummaryHistory {
   currentSummary: string | null;
 }
 
-interface QARound {
-  questions: string[];
-  answers: string[];
-  feedback: { correct: boolean; explanation: string }[];
-}
-
-interface QAState {
-  rounds: QARound[];
-}
-
-type Backend = 'gemini' | 'groq' | 'claude' | 'ollama';
 type JobType = 'transcribe' | 'summarize';
 
 export default function LecturePage() {
@@ -559,13 +552,7 @@ export default function LecturePage() {
             <div className="meta-item">
               <div className="meta-label">סטטוס</div>
               <div className="meta-value">
-                {lecture ? (
-                  <span className={`badge ${STATUS_CLASS[lecture.status] || 'badge-pending'}`}>
-                    {STATUS_LABEL[lecture.status] || lecture.status}
-                  </span>
-                ) : (
-                  '—'
-                )}
+                {lecture ? <StatusBadge status={lecture.status} /> : '—'}
               </div>
             </div>
             <div className="meta-item">
@@ -599,16 +586,7 @@ export default function LecturePage() {
             <div className="action-stack">
               <div>
                 <label className="field-label">מודל AI</label>
-                <select
-                  className="select-field select-field--full"
-                  value={backend}
-                  onChange={(e) => setBackend(e.target.value as Backend)}
-                >
-                  <option value="gemini">Gemini (Google)</option>
-                  <option value="groq">Groq (LLaMA)</option>
-                  <option value="claude">Claude (Anthropic)</option>
-                  <option value="ollama">Ollama (מקומי)</option>
-                </select>
+                <BackendSelect value={backend} onChange={setBackend} className="select-field select-field--full" />
               </div>
               <button className="btn" onClick={runSummarize} disabled={jobActive}>
                 {actionLabel}
@@ -646,103 +624,3 @@ export default function LecturePage() {
   );
 }
 
-function QASection({
-  qa,
-  answers,
-  onAnswerChange,
-  onStartNewRound,
-  onSubmit,
-  submitting,
-}: {
-  qa: QAState | null;
-  answers: string[];
-  onAnswerChange: (i: number, v: string) => void;
-  onStartNewRound: () => void;
-  onSubmit: () => void;
-  submitting: boolean;
-}) {
-  if (qa === null) {
-    return (
-      <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>טוען...</div>
-    );
-  }
-
-  const lastRound = qa.rounds[qa.rounds.length - 1];
-  const hasUnanswered = lastRound && lastRound.feedback.length === 0;
-
-  if (hasUnanswered) {
-    return (
-      <>
-        {lastRound.questions.map((q, i) => (
-          <div key={i} style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              {i + 1}. {q}
-            </div>
-            <textarea
-              rows={3}
-              style={{
-                width: '100%',
-                padding: 8,
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: 'var(--subtle)',
-                color: 'var(--text)',
-                fontSize: '0.9rem',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-              }}
-              placeholder="התשובה שלך..."
-              value={answers[i] || ''}
-              onChange={(e) => onAnswerChange(i, e.target.value)}
-            />
-          </div>
-        ))}
-        <button className="btn" onClick={onSubmit} disabled={submitting}>
-          {submitting ? 'שולח...' : 'שלח תשובות'}
-        </button>
-      </>
-    );
-  }
-
-  return (
-    <>
-      {lastRound &&
-        lastRound.questions.map((q, i) => {
-          const fb = lastRound.feedback[i];
-          const color = fb?.correct ? 'var(--success)' : 'var(--error)';
-          const icon = fb?.correct ? '✓' : '✗';
-          return (
-            <div
-              key={i}
-              style={{
-                marginBottom: 16,
-                padding: 12,
-                borderRadius: 8,
-                border: `1px solid ${color}30`,
-                background: `${color}10`,
-              }}
-            >
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                {i + 1}. {q}
-              </div>
-              <div
-                style={{
-                  fontSize: '0.85rem',
-                  color: 'var(--muted)',
-                  marginBottom: 6,
-                }}
-              >
-                תשובתך: {lastRound.answers[i] || '—'}
-              </div>
-              <div style={{ color, fontSize: '0.9rem' }}>
-                {icon} {fb?.explanation || ''}
-              </div>
-            </div>
-          );
-        })}
-      <button className="btn btn-outline" style={{ marginTop: 12 }} onClick={onStartNewRound}>
-        {lastRound ? '🔁 סיבוב נוסף' : '🧠 צור שאלות'}
-      </button>
-    </>
-  );
-}

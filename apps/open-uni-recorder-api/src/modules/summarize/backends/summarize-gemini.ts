@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildPrompt, summarizeChunk } from './prompt';
-import { MERGE_MAX_TOKENS } from '../config';
+import { buildPrompt, summarizeChunk, TRUNCATION_WARNING } from './prompt';
+import { MERGE_MAX_TOKENS } from '../../../config';
 
 export { summarizeChunk };
 
@@ -31,7 +31,7 @@ export async function mergeSummaries(chunks: string[], onProgress = (_: string) 
     }
     const response = await result.response;
     if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
-      const warning = '\n\n---\n⚠️ **סיכום קוצר עקב מגבלת אורך** — ייתכן שחלקים מהסוף נחתכו.';
+      const warning = TRUNCATION_WARNING;
       console.warn('[summarize] Gemini output truncated by token limit.');
       onToken(warning);
       full += warning;
@@ -45,7 +45,7 @@ export async function mergeSummaries(chunks: string[], onProgress = (_: string) 
   });
   const response = result.response;
   if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
-    const warning = '\n\n---\n⚠️ **סיכום קוצר עקב מגבלת אורך** — ייתכן שחלקים מהסוף נחתכו.';
+    const warning = TRUNCATION_WARNING;
     console.warn('[summarize] Gemini output truncated by token limit.');
     return response.text() + warning;
   }

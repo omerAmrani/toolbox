@@ -4,8 +4,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import path from 'path';
-import { getLectures, CLASSES_DIR } from './storage';
-import { reloadFromDisk } from './migrate';
+import { StorageService } from './modules/storage/storage.service';
 import { getSettings, saveSettings } from '../settings';
 import { DATA_DIR } from './db';
 
@@ -13,6 +12,8 @@ const execAsync = promisify(exec);
 
 @Controller('api')
 export class AppController {
+  constructor(private readonly storage: StorageService) {}
+
   @Get('search')
   search(@Query('q') q: string, @Query('classId') classId: string, @Res() res: Response) {
     if (!q || q.trim().length < 2) return res.status(400).json({ error: 'q must be at least 2 chars' });
@@ -20,13 +21,13 @@ export class AppController {
     const results: any[] = [];
     const classIds = classId
       ? [classId]
-      : (existsSync(CLASSES_DIR)
-          ? readdirSync(CLASSES_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
+      : (existsSync(this.storage.CLASSES_DIR)
+          ? readdirSync(this.storage.CLASSES_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
           : []);
 
     for (const cId of classIds) {
-      for (const lecture of getLectures(cId)) {
-        const tPath = path.join(CLASSES_DIR, cId, 'lectures', lecture.id, 'transcript.txt');
+      for (const lecture of this.storage.getLectures(cId)) {
+        const tPath = path.join(this.storage.CLASSES_DIR, cId, 'lectures', lecture.id, 'transcript.txt');
         if (!existsSync(tPath)) continue;
         const text = readFileSync(tPath, 'utf8');
         const idx = text.toLowerCase().indexOf(query.toLowerCase());
@@ -76,7 +77,7 @@ export class AppController {
   @Post('reload-from-disk')
   reloadFromDisk(@Res() res: Response) {
     try {
-      const result = reloadFromDisk();
+      const result = this.storage.reloadFromDisk();
       res.json({ ok: true, ...result });
     } catch (err: any) {
       res.status(500).json({ ok: false, error: err.message });

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync } from 'fs';
 import { nodewhisper } from 'nodejs-whisper';
-import { WHISPER_MODEL } from '../config';
+import { WHISPER_MODEL } from '../../../config';
 
 const silentLogger = { debug: () => {}, log: () => {}, error: () => {}, warn: () => {} };
 

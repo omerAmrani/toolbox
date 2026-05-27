@@ -7,6 +7,7 @@ import { SEMESTER_HE } from '@/lib/status';
 import { PageHeader } from '@/app/components/PageHeader';
 import { Modal } from '@/app/components/Modal';
 import { useToast } from '@/app/components/Toast';
+import { EmptyState } from '@/app/components/EmptyState';
 
 interface ClassRow {
   id: string;
@@ -108,21 +109,14 @@ export default function ClassesPage() {
           </div>
 
           <div className="classes-grid">
-            {classes === null && (
-              <div className="empty-state">
-                <div className="spinner-inline" />
-                <p>טוען...</p>
-              </div>
-            )}
+            {classes === null && <EmptyState message="טוען..." loading />}
 
             {classes?.length === 0 && (
-              <div className="empty-state">
-                <div className="icon">📚</div>
-                <p>אין קורסים עדיין</p>
+              <EmptyState message="אין קורסים עדיין" icon="📚">
                 <button className="btn" onClick={() => setModalOpen(true)}>
                   + הוסף קורס ראשון
                 </button>
-              </div>
+              </EmptyState>
             )}
 
             {classes?.map((c) => {

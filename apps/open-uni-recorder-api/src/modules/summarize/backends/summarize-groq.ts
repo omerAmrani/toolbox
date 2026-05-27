@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk';
-import { OUTPUT_LANG } from '../config';
+import { OUTPUT_LANG } from '../../../config';
+import { TRUNCATION_WARNING } from './prompt';
 
 const CHUNK_MODEL = process.env.GROQ_CHUNK_MODEL || 'llama-3.1-8b-instant';
 const MERGE_MODEL = process.env.GROQ_MERGE_MODEL || 'llama-3.3-70b-versatile';
@@ -74,7 +75,7 @@ async function callGroq(text: string, { model, maxTokens, onToken = null }: { mo
       if (token) onToken(token);
     }
     if (finishReason === 'length') {
-      const warning = '\n\n---\n⚠️ **סיכום קוצר עקב מגבלת אורך** — ייתכן שחלקים מהסוף נחתכו.';
+      const warning = TRUNCATION_WARNING;
       console.warn('[summarize] WARNING: output was truncated by token limit.');
       onToken(warning);
       full += warning;
@@ -90,7 +91,7 @@ async function callGroq(text: string, { model, maxTokens, onToken = null }: { mo
   });
   const choice = response.choices[0];
   if (choice.finish_reason === 'length') {
-    const warning = '\n\n---\n⚠️ **סיכום קוצר עקב מגבלת אורך** — ייתכן שחלקים מהסוף נחתכו.';
+    const warning = TRUNCATION_WARNING;
     console.warn('[summarize] WARNING: output was truncated by token limit.');
     return choice.message.content + warning;
   }

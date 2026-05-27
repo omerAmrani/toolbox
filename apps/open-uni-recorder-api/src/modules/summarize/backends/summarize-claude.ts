@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { buildPrompt, summarizeChunk } from './prompt';
-import { MERGE_MAX_TOKENS } from '../config';
+import { buildPrompt, summarizeChunk, TRUNCATION_WARNING } from './prompt';
+import { MERGE_MAX_TOKENS } from '../../../config';
 
 export { summarizeChunk };
 
@@ -34,9 +34,8 @@ export async function mergeSummaries(chunks: string[], onProgress = (_: string) 
     }
     const final = await stream.finalMessage();
     if (final.stop_reason === 'max_tokens') {
-      const warning = '\n\n---\n⚠️ **סיכום קוצר עקב מגבלת אורך** — ייתכן שחלקים מהסוף נחתכו.';
-      onToken(warning);
-      full += warning;
+      onToken(TRUNCATION_WARNING);
+      full += TRUNCATION_WARNING;
     }
     return full;
   }

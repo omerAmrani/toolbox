@@ -1,5 +1,5 @@
 import { Ollama } from 'ollama';
-import { OUTPUT_LANG } from '../config';
+import { OUTPUT_LANG } from '../../../config';
 
 const MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:14b';
 const ollama = new Ollama({ host: 'http://localhost:11434' });

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { PageHeader } from '@/app/components/PageHeader';
+import { STATUS_LABEL, STATUS_COLOR } from '@/lib/status';
 
 interface DataDirInfo {
   current: string;
@@ -70,33 +71,6 @@ interface ModelState {
   response?: string;
 }
 
-const STATUS_LABEL_FULL: Record<string, string> = {
-  pending: 'ממתין',
-  processing: 'מעבד',
-  transcribing: 'מתמלל',
-  transcribed: 'תומלל',
-  summarizing: 'מסכם',
-  summarized: 'סוכם',
-  done: 'הושלם',
-  failed: 'נכשל',
-  error: 'שגיאה',
-  aborted: 'בוטל',
-  skipped: 'דולג',
-};
-
-const STATUS_COLOR_FULL: Record<string, string> = {
-  pending: 'var(--muted)',
-  processing: 'var(--primary)',
-  transcribing: 'var(--primary)',
-  transcribed: 'var(--warning)',
-  summarizing: 'var(--primary)',
-  summarized: 'var(--success)',
-  done: 'var(--success)',
-  failed: 'var(--error)',
-  error: 'var(--error)',
-  aborted: 'var(--muted)',
-  skipped: 'var(--muted)',
-};
 
 function fmtDate(iso?: string | null): string {
   if (!iso) return '—';
@@ -647,9 +621,9 @@ export default function SettingsPage() {
                       <span className="sync-name">{l.name}</span>
                       <span
                         className="sync-status"
-                        style={{ color: STATUS_COLOR_FULL[l.status] || 'var(--muted)' }}
+                        style={{ color: STATUS_COLOR[l.status] || 'var(--muted)' }}
                       >
-                        {STATUS_LABEL_FULL[l.status] || l.status}
+                        {STATUS_LABEL[l.status] || l.status}
                       </span>
                     </div>
                   ))

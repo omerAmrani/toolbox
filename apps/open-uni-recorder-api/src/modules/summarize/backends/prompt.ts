@@ -1,3 +1,5 @@
+export const TRUNCATION_WARNING = '\n\n---\n⚠️ **סיכום קוצר עקב מגבלת אורך** — ייתכן שחלקים מהסוף נחתכו.';
+
 export function buildPrompt(transcript: string): string {
   return `Always respond in Hebrew. Technical terms may remain in English.
 
