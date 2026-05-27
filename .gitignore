@@ -43,3 +43,6 @@ apps/recorder-db/
 # Misc
 .DS_Store
 *.pem
+
+# Local only
+todo.md

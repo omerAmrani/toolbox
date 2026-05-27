@@ -4,12 +4,9 @@ Personal platform containing productivity and utility apps.
 
 ## Structure
 
-- apps/open-uni-recorder — lecture summarizer, Express/Node.js ESM, AI pipeline (Groq/Gemini/Claude/Ollama), SQLite, no build step
-- apps/macro-chat — macro nutrition tracker, Next.js + lightweight backend (planned)
-- packages/ui — shared React components, each app has its own theme (stub)
-- packages/ai — AI client wrappers, prompt templates, retry logic (planned)
-- packages/email — Gmail API, email utils (planned)
-- packages/github — GitHub API client (planned)
+- apps/open-uni-recorder-api — NestJS API, lecture processor (Groq/Gemini/Claude/Ollama), SQLite
+- apps/open-uni-recorder-web — Next.js 15 web UI for the above
+- packages/ui — shared React components (stub, promote when a second app exists)
 - packages/config — shared ESLint configs (`eslint/base|next|react-internal`) and tsconfig presets (`tsconfig/base|nextjs|react-library`)
 
 ## Package Manager
