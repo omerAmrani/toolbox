@@ -1,33 +1,55 @@
 # Lectures
 
-## Statuses
+Lecture lifecycle management: CRUD, status machine, transcription and summarization SSE endpoints, Q&A.
 
+## API
+
+- Module: `LecturesModule`
+- Controller: `LecturesController` (`api/classes/:classId/lectures`)
+
+**CRUD routes:**
+- `GET /api/classes/:classId/lectures` — list lectures for a class
+- `POST /api/classes/:classId/lectures` — create lecture (`name`, `url` required; `lectureDate`, `status` optional — only `pending`/`skipped` accepted)
+- `PATCH /api/classes/:classId/lectures/:lectureId` — update `name` / `lectureDate`
+- `DELETE /api/classes/:classId/lectures/:lectureId` — delete lecture and all associated files
+- `GET /api/classes/:classId/lectures/:lectureId/status` — full lecture record
+
+**Status machine:**
 `pending` → `transcribing` → `transcribed` → `summarizing` → `summarized` → `done`
 
-Can also be: `failed`, `aborted`, `skipped`, `error`. Retry resets `failed` → `pending`.
+Also: `failed`, `aborted`, `skipped`, `error`. Retry resets `failed` → `pending`.
 
-## SSE endpoints
+**Lifecycle routes:**
+- `POST .../retry` — `failed` → `pending`
+- `POST .../skip` — `pending` → `skipped`
+- `POST .../unskip` — `skipped` → `pending`
 
-Both stream `text/event-stream`. A second client connecting to an already-running transcribe job attaches to the existing bus (no duplicate job).
+**Transcribe (SSE):** `POST .../transcribe`
+- login to OPAL → extract video URL → download + ffmpeg → whisper → save `transcript.txt`
+- Body: `{ test: true }` caps download at 30 min
+- A second client connecting to an in-progress job attaches to the existing bus (no duplicate job)
 
-**POST `/api/classes/:classId/lectures/:lectureId/transcribe`**
-Flow: login to OPAL → extract video URL → download + ffmpeg → whisper transcription → save `transcript.txt`
-Optional body: `{ test: true }` caps download at 30 min.
+**Summarize (SSE):** `POST .../summarize`
+- reads `transcript.txt` → summarizes via backend → saves versioned summary → sets as current
+- Body: `{ backend: 'gemini' | 'groq' | 'claude' | 'ollama' }` overrides config default
 
-**POST `/api/classes/:classId/lectures/:lectureId/summarize`**
-Flow: read `transcript.txt` → summarize via backend → save summary version → set as current
-Optional body: `{ backend: 'gemini' | 'groq' | 'claude' | 'ollama' }` overrides config default.
+**SSE event shapes:**
+- `{ type: 'progress', step, message }`
+- `{ type: 'token', token }` — streaming token during summarization
+- `{ type: 'done' }`
+- `{ type: 'error' | 'aborted', message }`
 
-SSE event shapes: `{ type: 'progress', step, message }` | `{ type: 'token', token }` | `{ type: 'done' }` | `{ type: 'error' | 'aborted', message }`
+**Abort:** `POST .../abort` with `{ type: 'transcribe' | 'summarize' }`
 
-Abort: `POST .../abort` with `{ type: 'transcribe' | 'summarize' }`.
+**File routes:**
+- `GET .../transcript` — raw `transcript.txt`
+- `GET .../summary` — current summary content
+- `GET .../summaries` — list of all summary versions `{ versions[], currentSummary }`
+- `GET .../summaries/:summaryId` — specific version content
+- `PUT .../summaries/:summaryId/current` — set active version
+- `DELETE .../summaries/:summaryId` — delete a version
 
-## Q&A
+## Web
 
-Requires a summary to exist. Two-step: generate questions → submit answers → get feedback (all via Claude).
-- `POST .../qa/generate` — generates questions from current summary, appends a new round to `qa.json`
-- `POST .../qa/answer` with `{ roundIndex, answers[] }` — evaluates answers, saves feedback
-
-## Summary versions
-
-Each summarize run creates a versioned entry. `currentSummary` on the lecture points to the active one. The web UI lets users switch versions or delete old ones.
+- Pages: class detail (`/classes/[classId]`), lecture detail (`/classes/[classId]/lectures/[lectureId]`)
+- See [lectures.md](../../open-uni-recorder-web/docs/lectures.md)
