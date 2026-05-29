@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
-import { PageHeader } from '@/app/components/PageHeader';
+import { Status, fmtDate } from '@/app/components/Status';
 import { STATUS_LABEL, STATUS_COLOR } from '@/lib/status';
 
 interface DataDirInfo {
@@ -71,57 +72,77 @@ interface ModelState {
   response?: string;
 }
 
-
-function fmtDate(iso?: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? iso : d.toLocaleDateString('he-IL');
-}
-
-const MODELS: { key: ModelKey; icon: string; name: string; sub: string }[] = [
-  { key: 'gemini', icon: '🌟', name: 'Gemini', sub: 'Google · gemini-2.0-flash' },
-  { key: 'claude', icon: '🤖', name: 'Claude', sub: 'Anthropic · claude-haiku-4-5-20251001' },
+const MODELS: { key: ModelKey; emoji: string; name: string; sub: string; role: string }[] = [
+  { key: 'gemini', emoji: 'G', name: 'Gemini', sub: 'Google · gemini-2.0-flash', role: 'סיכומים גיבוי' },
+  { key: 'claude', emoji: 'C', name: 'Claude', sub: 'Anthropic · claude-haiku-4-5-20251001', role: 'סיכומים' },
 ];
 
+function SettingsToggle({ label, defaultOn }: { label: string; defaultOn?: boolean }) {
+  const [on, setOn] = useState(!!defaultOn);
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '12px 0',
+        borderBottom: '1px solid var(--line)',
+        cursor: 'pointer',
+      }}
+      onClick={() => setOn(!on)}
+    >
+      <span style={{ fontSize: '0.9rem' }}>{label}</span>
+      <span
+        style={{
+          width: 36,
+          height: 20,
+          background: on ? 'var(--ink)' : 'var(--line-2)',
+          borderRadius: 999,
+          position: 'relative',
+          transition: 'background 0.15s',
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            position: 'absolute',
+            insetBlockStart: 2,
+            insetInlineEnd: on ? 2 : 18,
+            width: 16,
+            height: 16,
+            background: 'var(--bg)',
+            borderRadius: '50%',
+            transition: 'inset-inline-end 0.15s',
+          }}
+        />
+      </span>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
-  // Data dir
+  const router = useRouter();
   const [dataDir, setDataDir] = useState<DataDirInfo | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState<string | null>(null);
   const [dataDirHasDb, setDataDirHasDb] = useState(false);
   const [dataDirResult, setDataDirResult] = useState<{ msg: string; error?: boolean } | null>(null);
   const [pickingDir, setPickingDir] = useState(false);
   const [savingDir, setSavingDir] = useState(false);
+  const [reloadMsg, setReloadMsg] = useState('');
+  const [reloading, setReloading] = useState(false);
 
-  // Queue
   const [queue, setQueue] = useState<QueueData | null>(null);
   const [cronLog, setCronLog] = useState<CronLog | null>(null);
   const queueRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Reload from disk
-  const [reloadMsg, setReloadMsg] = useState('');
-  const [reloading, setReloading] = useState(false);
-
-  // Sync
   const [syncSections, setSyncSections] = useState<SyncSection[]>([]);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-
-  // Archive
-  const [archive, setArchive] = useState<(Lecture & { classId: string; className: string })[]>([]);
-
-  // Email
-  const [emailOptions, setEmailOptions] = useState<{ classId: string; lectureId: string; label: string }[]>(
-    [],
-  );
-  const [emailIdx, setEmailIdx] = useState('');
-  const [emailMsg, setEmailMsg] = useState<{ msg: string; error?: boolean } | null>(null);
-  const [sendingEmail, setSendingEmail] = useState(false);
-
-  // Cron test
   const [cronTestMsg, setCronTestMsg] = useState<{ msg: string; error?: boolean } | null>(null);
   const [testingCron, setTestingCron] = useState(false);
 
-  // Model tests
+  const [archive, setArchive] = useState<(Lecture & { classId: string; className: string })[]>([]);
+
   const [models, setModels] = useState<Record<ModelKey, ModelState>>({
     gemini: { status: 'idle', msg: 'לא נבדק' },
     claude: { status: 'idle', msg: 'לא נבדק' },
@@ -131,9 +152,7 @@ export default function SettingsPage() {
     try {
       const data: DataDirInfo = await fetch(apiUrl('/api/data-dir')).then((r) => r.json());
       setDataDir(data);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const loadQueue = useCallback(async () => {
@@ -147,30 +166,19 @@ export default function SettingsPage() {
             const d: QueueData = await fetch(apiUrl('/api/classes/queue')).then((r) => r.json());
             setQueue(d);
             if (!d.lectures.some((l) => l.status === 'processing')) {
-              if (queueRefreshTimer.current) {
-                clearInterval(queueRefreshTimer.current);
-                queueRefreshTimer.current = null;
-              }
+              if (queueRefreshTimer.current) { clearInterval(queueRefreshTimer.current); queueRefreshTimer.current = null; }
             }
-          } catch {
-            /* ignore */
-          }
+          } catch { /* ignore */ }
         }, 3000);
       }
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const loadCronLog = useCallback(async () => {
     try {
-      const log: CronLog | null = await fetch(apiUrl('/api/classes/cron-log')).then((r) =>
-        r.json(),
-      );
+      const log: CronLog | null = await fetch(apiUrl('/api/classes/cron-log')).then((r) => r.json());
       setCronLog(log);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const loadArchive = useCallback(async () => {
@@ -178,17 +186,13 @@ export default function SettingsPage() {
       const classes: ClassRow[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
       const rows: (Lecture & { classId: string; className: string })[] = [];
       for (const cls of classes) {
-        const lectures: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`))
-          .then((r) => r.json())
-          .catch(() => []);
+        const lectures: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`)).then((r) => r.json()).catch(() => []);
         for (const l of lectures) {
           if (l.status === 'skipped') rows.push({ ...l, classId: cls.id, className: cls.name });
         }
       }
       setArchive(rows);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const initSyncPanel = useCallback(async () => {
@@ -197,45 +201,12 @@ export default function SettingsPage() {
       const linked = classes.filter((c) => c.opalCourseUrl);
       const sections = await Promise.all(
         linked.map(async (cls) => {
-          const existing: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`))
-            .then((r) => r.json())
-            .catch(() => []);
-          return {
-            classId: cls.id,
-            className: cls.name,
-            existing,
-            newLectures: [] as NewLecture[],
-          };
+          const existing: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`)).then((r) => r.json()).catch(() => []);
+          return { classId: cls.id, className: cls.name, existing, newLectures: [] as NewLecture[] };
         }),
       );
       setSyncSections(sections);
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const loadEmailLectures = useCallback(async () => {
-    try {
-      const classes: ClassRow[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
-      const options: { classId: string; lectureId: string; label: string }[] = [];
-      for (const cls of classes) {
-        const lectures: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`))
-          .then((r) => r.json())
-          .catch(() => []);
-        for (const l of lectures) {
-          if (l.currentSummary) {
-            options.push({
-              classId: cls.id,
-              lectureId: l.id,
-              label: `${cls.name} — ${l.name}`,
-            });
-          }
-        }
-      }
-      setEmailOptions(options);
-    } catch {
-      /* ignore */
-    }
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -244,14 +215,10 @@ export default function SettingsPage() {
     loadCronLog();
     initSyncPanel();
     loadArchive();
-    loadEmailLectures();
     return () => {
-      if (queueRefreshTimer.current) {
-        clearInterval(queueRefreshTimer.current);
-        queueRefreshTimer.current = null;
-      }
+      if (queueRefreshTimer.current) { clearInterval(queueRefreshTimer.current); queueRefreshTimer.current = null; }
     };
-  }, [loadDataDir, loadQueue, loadCronLog, initSyncPanel, loadArchive, loadEmailLectures]);
+  }, [loadDataDir, loadQueue, loadCronLog, initSyncPanel, loadArchive]);
 
   const pickDataDir = async () => {
     setPickingDir(true);
@@ -259,17 +226,9 @@ export default function SettingsPage() {
       const data: { path?: string; hasDb?: boolean; cancelled?: boolean; error?: string } =
         await fetch(apiUrl('/api/data-dir/pick'), { method: 'POST' }).then((r) => r.json());
       if (data.cancelled) return;
-      if (data.error) {
-        setDataDirResult({ msg: `שגיאה: ${data.error}`, error: true });
-        return;
-      }
-      if (data.path) {
-        setPendingDataDir(data.path);
-        setDataDirHasDb(!!data.hasDb);
-      }
-    } finally {
-      setPickingDir(false);
-    }
+      if (data.error) { setDataDirResult({ msg: `שגיאה: ${data.error}`, error: true }); return; }
+      if (data.path) { setPendingDataDir(data.path); setDataDirHasDb(!!data.hasDb); }
+    } finally { setPickingDir(false); }
   };
 
   const saveDataDir = async () => {
@@ -281,33 +240,22 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataDir: pendingDataDir }),
       }).then((r) => r.json());
-      if (data.ok) {
-        setDataDirResult({ msg: 'הנתיב נשמר. השרת מופעל מחדש...' });
-        setPendingDataDir(null);
-      } else {
-        setDataDirResult({ msg: `שגיאה: ${data.error}`, error: true });
-      }
-    } catch {
-      setDataDirResult({ msg: 'שגיאת רשת', error: true });
-    } finally {
-      setSavingDir(false);
-    }
+      if (data.ok) { setDataDirResult({ msg: 'הנתיב נשמר. השרת מופעל מחדש...' }); setPendingDataDir(null); }
+      else setDataDirResult({ msg: `שגיאה: ${data.error}`, error: true });
+    } catch { setDataDirResult({ msg: 'שגיאת רשת', error: true }); }
+    finally { setSavingDir(false); }
   };
 
   const reloadFromDisk = async () => {
     setReloading(true);
     setReloadMsg('טוען...');
     try {
-      const r = await fetch(apiUrl('/api/reload-from-disk'), { method: 'POST' });
       const data: { ok?: boolean; classes?: number; lectures?: number; error?: string } =
-        await r.json();
+        await fetch(apiUrl('/api/reload-from-disk'), { method: 'POST' }).then((r) => r.json());
       if (data.ok) setReloadMsg(`שוחזר: ${data.classes} קורסים, ${data.lectures} הרצאות`);
       else setReloadMsg(`שגיאה: ${data.error}`);
-    } catch {
-      setReloadMsg('שגיאת רשת');
-    } finally {
-      setReloading(false);
-    }
+    } catch { setReloadMsg('שגיאת רשת'); }
+    finally { setReloading(false); }
   };
 
   const runSync = async () => {
@@ -315,98 +263,61 @@ export default function SettingsPage() {
     setSyncProgress('מתחיל...');
     try {
       await streamSSE('/api/classes/sync', {}, (ev) => {
-        if (ev.type === 'progress') {
-          setSyncProgress(String(ev.message));
-        } else if (ev.type === 'class') {
+        if (ev.type === 'progress') setSyncProgress(String(ev.message));
+        else if (ev.type === 'class') {
           const classId = String(ev.classId);
           const newLectures = (ev.newLectures as NewLecture[]) || [];
-          setSyncSections((prev) =>
-            prev.map((s) => (s.classId === classId ? { ...s, newLectures } : s)),
-          );
-        } else if (ev.type === 'done') {
-          setSyncProgress('סיום בדיקה');
-        }
+          setSyncSections((prev) => prev.map((s) => s.classId === classId ? { ...s, newLectures } : s));
+        } else if (ev.type === 'done') setSyncProgress('סיום בדיקה');
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'שגיאה';
-      setSyncProgress(`שגיאה: ${msg}`);
-    } finally {
-      setSyncing(false);
-    }
+      setSyncProgress(`שגיאה: ${err instanceof Error ? err.message : 'שגיאה'}`);
+    } finally { setSyncing(false); }
   };
 
-  const queueLecture = async (classId: string, idx: number) => {
+  const queueLectureItem = async (classId: string, idx: number) => {
     const section = syncSections.find((s) => s.classId === classId);
     const lecture = section?.newLectures[idx];
     if (!lecture) return;
     const r = await fetch(apiUrl(`/api/classes/${classId}/lectures`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: lecture.name,
-        url: lecture.url,
-        lectureDate: lecture.lectureDate,
-      }),
+      body: JSON.stringify({ name: lecture.name, url: lecture.url, lectureDate: lecture.lectureDate }),
     });
     if (r.ok) {
       setSyncSections((prev) =>
         prev.map((s) =>
           s.classId === classId
-            ? {
-                ...s,
-                newLectures: s.newLectures.filter((_, i) => i !== idx),
-                existing: [...s.existing, { id: '', name: lecture.name, status: 'pending', lectureDate: lecture.lectureDate || null }],
-              }
+            ? { ...s, newLectures: s.newLectures.filter((_, i) => i !== idx), existing: [...s.existing, { id: '', name: lecture.name, status: 'pending', lectureDate: lecture.lectureDate || null }] }
             : s,
         ),
       );
     }
   };
 
-  const skipLecture = async (classId: string, idx: number) => {
+  const skipLectureItem = async (classId: string, idx: number) => {
     const section = syncSections.find((s) => s.classId === classId);
     const lecture = section?.newLectures[idx];
     if (!lecture) return;
     const r = await fetch(apiUrl(`/api/classes/${classId}/lectures`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: lecture.name,
-        url: lecture.url,
-        lectureDate: lecture.lectureDate,
-        status: 'skipped',
-      }),
+      body: JSON.stringify({ name: lecture.name, url: lecture.url, lectureDate: lecture.lectureDate, status: 'skipped' }),
     });
     if (r.ok) {
-      setSyncSections((prev) =>
-        prev.map((s) =>
-          s.classId === classId
-            ? { ...s, newLectures: s.newLectures.filter((_, i) => i !== idx) }
-            : s,
-        ),
-      );
+      setSyncSections((prev) => prev.map((s) => s.classId === classId ? { ...s, newLectures: s.newLectures.filter((_, i) => i !== idx) } : s));
       loadArchive();
     }
   };
 
   const skipFromQueue = async (classId: string, lectureId: string) => {
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/skip`), {
-      method: 'POST',
-    });
-    if (r.ok) {
-      loadQueue();
-      loadArchive();
-    }
+    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/skip`), { method: 'POST' });
+    if (r.ok) { loadQueue(); loadArchive(); }
   };
 
   const unskipLecture = async (classId: string, lectureId: string) => {
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/unskip`), {
-      method: 'POST',
-    });
-    if (r.ok) {
-      loadArchive();
-      loadQueue();
-    }
+    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/unskip`), { method: 'POST' });
+    if (r.ok) { loadArchive(); loadQueue(); }
   };
 
   const triggerPipeline = async () => {
@@ -418,38 +329,13 @@ export default function SettingsPage() {
     setTestingCron(true);
     setCronTestMsg({ msg: 'מזהה הרצאות חדשות...' });
     try {
-      const r = await fetch(apiUrl('/api/classes/run-pipeline'), { method: 'POST' });
-      const data: { message?: string; found?: number } = await r.json();
+      const data: { message?: string; found?: number } =
+        await fetch(apiUrl('/api/classes/run-pipeline'), { method: 'POST' }).then((r) => r.json());
       setCronTestMsg({ msg: data.message || `נמצאו ${data.found ?? '?'} הרצאות חדשות` });
       loadQueue();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'שגיאה';
-      setCronTestMsg({ msg: `שגיאה: ${msg}`, error: true });
-    } finally {
-      setTestingCron(false);
-    }
-  };
-
-  const sendTestEmail = async () => {
-    const opt = emailOptions[Number(emailIdx)];
-    if (!opt) return;
-    setSendingEmail(true);
-    setEmailMsg({ msg: 'שולח מייל...' });
-    try {
-      const r = await fetch(apiUrl('/api/classes/test-email'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classId: opt.classId, lectureId: opt.lectureId }),
-      });
-      const data: { error?: string } = await r.json();
-      if (r.ok) setEmailMsg({ msg: 'המייל נשלח בהצלחה ✓' });
-      else setEmailMsg({ msg: `שגיאה: ${data.error}`, error: true });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'שגיאה';
-      setEmailMsg({ msg: `שגיאת רשת: ${msg}`, error: true });
-    } finally {
-      setSendingEmail(false);
-    }
+      setCronTestMsg({ msg: `שגיאה: ${err instanceof Error ? err.message : 'שגיאה'}`, error: true });
+    } finally { setTestingCron(false); }
   };
 
   const testModel = async (key: ModelKey) => {
@@ -458,346 +344,286 @@ export default function SettingsPage() {
       const data: { ok?: boolean; configured?: boolean; error?: string; ms?: number; response?: string } =
         await fetch(apiUrl(`/api/health/${key}`)).then((r) => r.json());
       if (!data.configured) {
-        setModels((m) => ({
-          ...m,
-          [key]: { status: 'warning', msg: data.error || 'מפתח API לא מוגדר' },
-        }));
+        setModels((m) => ({ ...m, [key]: { status: 'warning', msg: data.error || 'מפתח API לא מוגדר' } }));
       } else if (data.ok) {
-        setModels((m) => ({
-          ...m,
-          [key]: {
-            status: 'ok',
-            msg: 'פועל',
-            latency: data.ms,
-            response: data.response,
-          },
-        }));
+        setModels((m) => ({ ...m, [key]: { status: 'ok', msg: 'תקין', latency: data.ms, response: data.response } }));
       } else {
         setModels((m) => ({ ...m, [key]: { status: 'error', msg: data.error || 'שגיאה' } }));
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'שגיאה';
-      setModels((m) => ({ ...m, [key]: { status: 'error', msg } }));
+      setModels((m) => ({ ...m, [key]: { status: 'error', msg: err instanceof Error ? err.message : 'שגיאה' } }));
     }
   };
 
-  const testAll = async () => {
-    await Promise.all(MODELS.map((m) => testModel(m.key)));
-  };
+  const testAll = async () => { await Promise.all(MODELS.map((m) => testModel(m.key))); };
 
   const cronInfoStr = cronLog
-    ? `הרצה אחרונה: ${new Date(cronLog.timestamp).toLocaleString('he-IL')} · ${
-        cronLog.trigger === 'cron' ? 'cרון' : cronLog.trigger === 'retry' ? 'ניסיון חוזר' : 'ידני'
-      } · נמצאו ${cronLog.found} · עובדו ${cronLog.queued}`
-    : '';
+    ? `הרצה אחרונה: ${new Date(cronLog.timestamp).toLocaleString('he-IL')} · ${cronLog.trigger === 'cron' ? 'קרון' : cronLog.trigger === 'retry' ? 'ניסיון חוזר' : 'ידני'} · נמצאו ${cronLog.found} · עובדו ${cronLog.queued}`
+    : null;
 
   const pendingQueue = queue?.lectures.filter((l) => l.status === 'pending') || [];
 
   return (
-    <div className="page-settings">
-      <PageHeader>
-        <h1>⚙️ הגדרות</h1>
-        <p>בדיקת מצב מודלי AI</p>
-      </PageHeader>
+    <div className="page fade-in">
+      <div className="display-h">
+        <div className="display-h__eye">תצורה ובריאות</div>
+        <h1 className="display-h__title">הגדרות.</h1>
+        <p className="display-h__sub">
+          ניהול מודלי בינה מלאכותית, תור עיבוד, וזיהוי אוטומטי של הרצאות חדשות
+          מאזור הקורס בפורטל האוניברסיטה הפתוחה.
+        </p>
+      </div>
 
-      <main>
-        {/* Data directory */}
-        <div className="card card-compact">
-          <div className="section-title">מיקום נתונים</div>
-          <div
-            style={{
-              fontSize: '0.85rem',
-              color: 'var(--muted)',
-              marginBottom: 8,
-              wordBreak: 'break-all',
-            }}
-          >
-            {dataDir ? `נתיב נוכחי: ${dataDir.current}` : 'טוען...'}
-          </div>
-          <button className="test-all-btn" onClick={pickDataDir} disabled={pickingDir}>
-            {pickingDir ? 'פותח...' : '📁 בחר תיקייה'}
-          </button>
-          {pendingDataDir && !dataDirHasDb && dataDir?.current && (
-            <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--warning)' }}>
-              נתיב זה ריק. הנתונים הקיימים נשארים ב: {dataDir.current}
-            </div>
-          )}
-          {pendingDataDir && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: '0.85rem', wordBreak: 'break-all', marginBottom: 8 }}>
-                נתיב נבחר: {pendingDataDir}
-              </div>
-              <button className="test-all-btn" onClick={saveDataDir} disabled={savingDir}>
-                {savingDir ? 'שומר...' : 'שמור והפעל מחדש'}
-              </button>
-              <button
-                className="test-btn test-btn-ghost"
-                style={{ marginRight: 8 }}
-                onClick={() => setPendingDataDir(null)}
-              >
-                ביטול
-              </button>
-            </div>
-          )}
-          {dataDirResult && (
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: '0.85rem',
-                color: dataDirResult.error ? 'var(--error)' : 'var(--success)',
-              }}
-            >
-              {dataDirResult.msg}
-            </div>
-          )}
+      {/* Account Card — static (decision 7) */}
+      <div className="account" style={{ marginBottom: 'var(--gap)' }}>
+        <div className="account__avatar">פ</div>
+        <div>
+          <div className="account__uni">האוניברסיטה הפתוחה</div>
+          <div className="account__user">—</div>
+          <div className="account__pill">חיבור לא מוגדר</div>
         </div>
-
-        {/* Queue */}
-        <div className="card card-compact">
-          <div className="section-title">תור העיבוד</div>
-          <button className="test-all-btn" onClick={triggerPipeline} disabled={queue?.running}>
-            {queue?.running ? 'פועל...' : '▶ הפעל תור'}
+        <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
+          <button
+            className="btn btn--ghost btn--sm"
+            style={{ background: 'transparent', color: 'var(--bg)', borderColor: 'color-mix(in srgb, var(--bg) 30%, transparent)' }}
+            onClick={() => router.push('/setup')}
+          >
+            ↗ הגדר חשבון
           </button>
-          <div className="cron-info">{cronInfoStr}</div>
-          <div style={{ marginTop: 12 }}>
-            {pendingQueue.length === 0 ? (
-              <div className="sync-empty">התור ריק</div>
+        </div>
+      </div>
+
+      <div className="settings-grid">
+        {/* Detect-new sync card */}
+        <div className="set-card">
+          <div className="set-card__h">
+            <div>
+              <div className="set-card__title">זיהוי הרצאות חדשות</div>
+              <div className="set-card__sub">
+                {cronInfoStr || 'בודק את אזור הקורס מדי 6 שעות'}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn--ghost btn--sm" onClick={runSync} disabled={syncing}>
+                {syncing ? 'מחפש...' : '🔍 בדוק עכשיו'}
+              </button>
+              <button className="btn btn--ghost btn--sm" onClick={testCron} disabled={testingCron}>
+                {testingCron ? 'מריץ...' : '▶ קרון'}
+              </button>
+            </div>
+          </div>
+
+          {syncProgress && (
+            <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 12 }}>{syncProgress}</div>
+          )}
+          {cronTestMsg && (
+            <div style={{ fontSize: '0.85rem', color: cronTestMsg.error ? 'var(--danger)' : 'var(--good)', marginBottom: 12 }}>
+              {cronTestMsg.msg}
+            </div>
+          )}
+
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {syncSections.length === 0 ? (
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                אין קורסים עם קישור OPAL — הגדר קישור בדף הקורס
+              </div>
             ) : (
-              pendingQueue.map((l) => (
-                <div key={l.lectureId} className="sync-row">
-                  <span className="sync-date">{l.className}</span>
-                  <span className="sync-name">{l.name}</span>
-                  <span className="sync-added">{fmtDate(l.addedAt)}</span>
-                  <button
-                    className="test-btn test-btn-ghost"
-                    onClick={() => skipFromQueue(l.classId, l.lectureId)}
-                  >
-                    דלג
-                  </button>
+              syncSections.map((s) => (
+                <div key={s.classId} style={{ marginBottom: 12 }}>
+                  <div style={{ font: '600 0.85rem/1 var(--font-ui)', marginBottom: 6 }}>{s.className}</div>
+                  {s.existing.map((l, i) => (
+                    <div key={l.id || i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
+                      <span style={{ color: 'var(--ink-2)' }}>{l.name}</span>
+                      <span style={{ color: STATUS_COLOR[l.status] || 'var(--muted)' }}>{STATUS_LABEL[l.status] || l.status}</span>
+                    </div>
+                  ))}
+                  {s.newLectures.length > 0 && (
+                    <>
+                      <div style={{ font: '600 0.78rem/1 var(--font-ui)', color: 'var(--accent)', padding: '8px 0 4px', borderTop: '1px dashed var(--line-2)', marginTop: 4 }}>
+                        חדש — {s.newLectures.length} הרצאות
+                      </div>
+                      {s.newLectures.map((l, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
+                          <span style={{ flex: 1, color: 'var(--ink-2)' }}>{l.name}</span>
+                          <button className="btn btn--sm" style={{ fontSize: '0.75rem', padding: '4px 8px' }} onClick={() => queueLectureItem(s.classId, i)}>+ הוסף</button>
+                          <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.75rem', padding: '4px 8px' }} onClick={() => skipLectureItem(s.classId, i)}>דלג</button>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               ))
+            )}
+
+            {/* Archive */}
+            {archive.length > 0 && (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
+                <div style={{ font: '600 0.85rem/1 var(--font-ui)', marginBottom: 8, color: 'var(--muted)' }}>ארכיון — דולגו</div>
+                {archive.map((l) => (
+                  <div key={`${l.classId}-${l.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
+                    <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{l.className}</span>
+                    <span style={{ flex: 1, color: 'var(--ink-2)' }}>{l.name}</span>
+                    <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.75rem', padding: '4px 8px' }} onClick={() => unskipLecture(l.classId, l.id)}>↩ הוצא</button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Reload from disk */}
-        <div className="card card-compact">
-          <div className="section-title">שחזור מדיסק</div>
-          <button className="test-all-btn" onClick={reloadFromDisk} disabled={reloading}>
-            ♻️ טען מחדש מדיסק
-          </button>
-          <div style={{ marginTop: 8, fontSize: '0.85rem', color: 'var(--muted)' }}>
-            {reloadMsg}
+        {/* Notifications — static (decision 9) */}
+        <div className="set-card">
+          <div className="set-card__h">
+            <div>
+              <div className="set-card__title">התראות</div>
+              <div className="set-card__sub">איך לקבל עדכון על סיכומים חדשים</div>
+            </div>
+          </div>
+          <SettingsToggle label="מייל בסיום סיכום" defaultOn />
+          <SettingsToggle label="התראת מערכת בכישלון" defaultOn />
+          <SettingsToggle label="סיכום שבועי במייל" />
+          <SettingsToggle label="התראת WhatsApp (ניסיוני)" />
+        </div>
+
+        {/* Storage card */}
+        <div className="set-card">
+          <div className="set-card__h">
+            <div>
+              <div className="set-card__title">אחסון</div>
+              <div className="set-card__sub">תמלולים, סיכומים, מטה-דאטה</div>
+            </div>
+            <button className="btn btn--ghost btn--sm" onClick={pickDataDir} disabled={pickingDir}>
+              {pickingDir ? 'פותח...' : '📁 שנה תיקייה'}
+            </button>
+          </div>
+
+          <div style={{ font: '0.85rem/1.5 var(--font-ui)', color: 'var(--muted)', marginBottom: 14 }}>
+            תיקייה נוכחית:
+            <div style={{ font: '0.82rem var(--font-mono)', color: 'var(--ink)', wordBreak: 'break-all', marginTop: 6, padding: '8px 12px', background: 'var(--surface-2)', borderRadius: 8 }}>
+              {dataDir ? dataDir.current : '—'}
+            </div>
+          </div>
+
+          {pendingDataDir && !dataDirHasDb && dataDir?.current && (
+            <div style={{ marginBottom: 8, fontSize: '0.85rem', color: 'var(--warn)' }}>
+              נתיב זה ריק. הנתונים הקיימים נשארים ב: {dataDir.current}
+            </div>
+          )}
+          {pendingDataDir && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: '0.85rem', wordBreak: 'break-all', marginBottom: 8 }}>נתיב נבחר: {pendingDataDir}</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn--sm" onClick={saveDataDir} disabled={savingDir}>{savingDir ? 'שומר...' : 'שמור והפעל מחדש'}</button>
+                <button className="btn btn--ghost btn--sm" onClick={() => setPendingDataDir(null)}>ביטול</button>
+              </div>
+            </div>
+          )}
+          {dataDirResult && (
+            <div style={{ fontSize: '0.85rem', color: dataDirResult.error ? 'var(--danger)' : 'var(--good)', marginBottom: 8 }}>
+              {dataDirResult.msg}
+            </div>
+          )}
+
+          <div style={{ paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+            <button className="btn btn--ghost btn--sm" onClick={reloadFromDisk} disabled={reloading}>
+              {reloading ? 'טוען...' : '♻️ שחזור מדיסק'}
+            </button>
+            {reloadMsg && (
+              <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--muted)' }}>{reloadMsg}</div>
+            )}
           </div>
         </div>
 
-        {/* Sync */}
-        <div className="card card-compact">
-          <div className="section-title">זיהוי הרצאות חדשות</div>
-          <button className="test-all-btn" onClick={runSync} disabled={syncing}>
-            {syncing ? 'מחפש...' : '🔍 בדוק הרצאות חדשות'}
-          </button>
-          {syncProgress !== null && (
-            <div className="sync-progress">{syncProgress}</div>
-          )}
-          {syncSections.length === 0 ? (
-            <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-              אין קורסים עם קישור OPAL — הגדר קישור בדף הקורס
+        {/* Queue card */}
+        <div className="set-card">
+          <div className="set-card__h">
+            <div>
+              <div className="set-card__title">תור עיבוד</div>
+              <div className="set-card__sub">{pendingQueue.length} הרצאות ממתינות</div>
             </div>
-          ) : (
-            syncSections.map((s) => (
-              <div key={s.classId} className="sync-class-section">
-                <div className="sync-class-name">{s.className}</div>
-                {s.existing.length === 0 ? (
-                  <div className="sync-empty">אין הרצאות שמורות</div>
-                ) : (
-                  s.existing.map((l, i) => (
-                    <div key={l.id || i} className="sync-row">
-                      <span className="sync-date">{fmtDate(l.lectureDate)}</span>
-                      <span className="sync-name">{l.name}</span>
-                      <span
-                        className="sync-status"
-                        style={{ color: STATUS_COLOR[l.status] || 'var(--muted)' }}
-                      >
-                        {STATUS_LABEL[l.status] || l.status}
-                      </span>
-                    </div>
-                  ))
-                )}
-                {s.newLectures.length > 0 && (
-                  <>
-                    <div className="sync-new-header">חדש — {s.newLectures.length} הרצאות</div>
-                    {s.newLectures.map((l, i) => (
-                      <div key={i} className="sync-row">
-                        <span className="sync-date">{fmtDate(l.lectureDate)}</span>
-                        <span className="sync-name">{l.name}</span>
-                        <button
-                          className="test-btn"
-                          onClick={() => queueLecture(s.classId, i)}
-                        >
-                          + הוסף לתור
-                        </button>
-                        <button
-                          className="test-btn test-btn-ghost"
-                          onClick={() => skipLecture(s.classId, i)}
-                        >
-                          דלג
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            ))
-          )}
-        </div>
+            <button className="btn btn--sm" onClick={triggerPipeline} disabled={queue?.running}>
+              {queue?.running ? 'פועל...' : '▶ הפעל תור'}
+            </button>
+          </div>
 
-        {/* Archive */}
-        <div className="card card-compact">
-          <div className="section-title">ארכיון — הרצאות שדולגו</div>
-          {archive.length === 0 ? (
-            <div className="sync-empty">אין הרצאות בארכיון</div>
+          {pendingQueue.length === 0 ? (
+            <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>התור ריק</div>
           ) : (
-            archive.map((l) => (
-              <div key={`${l.classId}-${l.id}`} className="sync-row">
-                <span className="sync-date">{l.className}</span>
-                <span className="sync-name">{l.name}</span>
-                <span className="sync-added">{fmtDate(l.lectureDate || l.addedAt)}</span>
-                <button className="test-btn" onClick={() => unskipLecture(l.classId, l.id)}>
-                  ↩ הוצא מארכיון
+            pendingQueue.map((l) => (
+              <div key={l.lectureId} className="queue-row">
+                <div className="queue-row__class">{l.className}</div>
+                <div className="queue-row__name">{l.name}</div>
+                <Status s={l.status} />
+                <button
+                  className="btn btn--ghost btn--sm"
+                  style={{ fontSize: '0.75rem', padding: '4px 8px' }}
+                  onClick={() => skipFromQueue(l.classId, l.lectureId)}
+                >
+                  דלג
                 </button>
               </div>
             ))
           )}
         </div>
 
-        {/* Test Email */}
-        <div className="card card-compact">
-          <div className="section-title">בדיקת שליחת מייל</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
-            <select
-              style={{
-                flex: 1,
-                minWidth: 200,
-                padding: '6px 10px',
-                borderRadius: 8,
-                border: '1px solid var(--border)',
-                background: 'var(--subtle)',
-                color: 'var(--text)',
-                fontSize: '0.9rem',
-              }}
-              value={emailIdx}
-              onChange={(e) => setEmailIdx(e.target.value)}
-            >
-              <option value="">
-                {emailOptions.length === 0 ? 'אין הרצאות עם סיכום' : 'בחר הרצאה...'}
-              </option>
-              {emailOptions.map((o, i) => (
-                <option key={i} value={String(i)}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <button
-              className="test-all-btn"
-              style={{ margin: 0 }}
-              disabled={!emailIdx || sendingEmail}
-              onClick={sendTestEmail}
-            >
-              {sendingEmail ? 'שולח...' : 'שלח'}
-            </button>
+        {/* AI Models — full width */}
+        <div className="set-card set-card--wide">
+          <div className="set-card__h">
+            <div>
+              <div className="set-card__title">מודלי בינה מלאכותית</div>
+              <div className="set-card__sub">סטטוס בזמן אמת · בדיקת זמינות וזמני תגובה</div>
+            </div>
+            <button className="btn btn--ghost btn--sm" onClick={testAll}>▶ בדוק את כולם</button>
           </div>
-          {emailMsg && (
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: '0.85rem',
-                color: emailMsg.error ? 'var(--error)' : 'var(--success)',
-              }}
-            >
-              {emailMsg.msg}
-            </div>
-          )}
-        </div>
 
-        {/* Test Cron */}
-        <div className="card card-compact">
-          <div className="section-title">בדיקת קרון — זיהוי והוספה לתור</div>
-          <button className="test-all-btn" onClick={testCron} disabled={testingCron}>
-            {testingCron ? 'מריץ...' : '▶ הרץ קרון עכשיו'}
-          </button>
-          {cronTestMsg && (
-            <div
-              style={{
-                marginTop: 8,
-                fontSize: '0.85rem',
-                color: cronTestMsg.error ? 'var(--error)' : 'var(--success)',
-              }}
-            >
-              {cronTestMsg.msg}
-            </div>
-          )}
-        </div>
-
-        {/* AI model tests */}
-        <div className="card">
-          <div className="section-title">מודלי AI — בדיקת תקינות</div>
-          <button className="test-all-btn" onClick={testAll}>
-            ▶ בדוק את כולם
-          </button>
-          <div className="model-grid">
-            {MODELS.map(({ key, icon, name, sub }) => {
-              const m = models[key];
-              const cardCls =
-                m.status === 'ok'
-                  ? 'model-card ok'
-                  : m.status === 'error'
-                    ? 'model-card error'
-                    : m.status === 'warning'
-                      ? 'model-card no-key'
-                      : 'model-card';
-              const dotCls =
-                m.status === 'ok'
-                  ? 'status-dot dot-ok'
-                  : m.status === 'error'
-                    ? 'status-dot dot-error'
-                    : m.status === 'warning'
-                      ? 'status-dot dot-warning'
-                      : 'status-dot dot-idle';
-              return (
-                <div key={key} className={cardCls}>
-                  <div className="model-header">
-                    <div className="model-icon">{icon}</div>
-                    <div>
-                      <div className="model-name">{name}</div>
-                      <div className="model-sub">{sub}</div>
-                    </div>
+          {MODELS.map(({ key, emoji, name, sub, role }) => {
+            const m = models[key];
+            const cls =
+              m.status === 'ok' ? 'model model--ok' :
+              m.status === 'error' ? 'model model--err' :
+              m.status === 'warning' ? 'model model--warn' :
+              'model';
+            return (
+              <div key={key} className={cls}>
+                <div className="model__avatar">{emoji}</div>
+                <div>
+                  <div className="model__name">
+                    {name}
+                    <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--muted)', marginInlineStart: 6 }}>· {role}</span>
                   </div>
-                  <div className="status-row">
-                    <div className={dotCls} />
-                    <span className="status-text">{m.msg}</span>
-                    {m.latency !== undefined && (
-                      <span className="latency">{m.latency}ms</span>
-                    )}
-                  </div>
-                  {m.response && (
-                    <div className="response-preview" style={{ display: 'block' }}>
-                      תגובה: &quot;{m.response}&quot;
-                    </div>
+                  <div className="model__sub">{sub}</div>
+                </div>
+                <div className="model__stat">
+                  {m.status === 'testing' ? (
+                    <>
+                      <strong style={{ color: 'var(--muted)' }}>...</strong>
+                      <span>בודק...</span>
+                    </>
+                  ) : m.latency ? (
+                    <>
+                      <strong>{m.latency}<span style={{ fontWeight: 400, fontSize: '0.7em', color: 'var(--muted)' }}>ms</span></strong>
+                      <span>{m.msg}</span>
+                    </>
+                  ) : (
+                    <>
+                      <strong style={{ color: m.status === 'warning' ? 'var(--warn)' : 'var(--muted)' }}>—</strong>
+                      <span>{m.msg}</span>
+                    </>
                   )}
                   <button
-                    className="test-btn"
+                    className="btn btn--ghost btn--sm"
+                    style={{ marginTop: 8, fontSize: '0.75rem' }}
                     onClick={() => testModel(key)}
                     disabled={m.status === 'testing'}
                   >
                     {m.status === 'testing' ? 'בודק...' : m.status === 'idle' ? 'בדוק' : 'בדוק שנית'}
                   </button>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

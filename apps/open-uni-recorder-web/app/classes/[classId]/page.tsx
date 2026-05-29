@@ -1,18 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
-import { SEMESTER_HE, STATUS_ABORT_TYPE } from '@/lib/status';
-import type { Backend } from '@/app/components/BackendSelect';
+import { SEMESTER_HE } from '@/lib/status';
 import { streamSSE } from '@/lib/sse';
-import { PageHeader } from '@/app/components/PageHeader';
-import { Modal } from '@/app/components/Modal';
 import { useToast } from '@/app/components/Toast';
-import { StatusBadge } from '@/app/components/StatusBadge';
-import { BackendSelect } from '@/app/components/BackendSelect';
-import { EmptyState } from '@/app/components/EmptyState';
+import { Status, fmtDateLong } from '@/app/components/Status';
+import {
+  getClassColor,
+  classIcon,
+  isClassArchived,
+  setClassArchived,
+  isLectureArchived,
+  setLectureArchived,
+} from '@/lib/classMeta';
 
 interface ClassInfo {
   id: string;
@@ -29,41 +31,22 @@ interface Lecture {
   status: string;
 }
 
-interface SearchResult {
-  lectureId: string;
-  lectureName: string;
-  snippet: string;
-}
-
-interface JobState {
-  message: string;
-  type: 'transcribe' | 'summarize' | null;
-}
+const IN_FLIGHT = new Set(['transcribing', 'summarizing', 'processing']);
 
 export default function ClassDetailPage() {
   const params = useParams<{ classId: string }>();
+  const router = useRouter();
   const classId = params.classId;
   const { show: showToast, element: toastEl } = useToast();
 
   const [cls, setCls] = useState<ClassInfo | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [opalUrl, setOpalUrl] = useState('');
+  const [editingUrl, setEditingUrl] = useState(false);
   const [lectures, setLectures] = useState<Lecture[] | null>(null);
-  const [backend, setBackend] = useState<Backend>('gemini');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResult[] | 'loading' | 'error' | null>(null);
-  const [running, setRunning] = useState<Map<string, JobState>>(new Map());
-
-  const [addOpen, setAddOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newUrl, setNewUrl] = useState('');
-  const [newDate, setNewDate] = useState('');
-
-  const [editOpen, setEditOpen] = useState(false);
-  const [editId, setEditId] = useState('');
-  const [editName, setEditName] = useState('');
-  const [editDate, setEditDate] = useState('');
-
+  const [archivedRefresh, setArchivedRefresh] = useState(0);
+  const [classArchivedState, setClassArchivedState] = useState(false);
+  const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadClass = useCallback(async () => {
@@ -76,6 +59,7 @@ export default function ClassDetailPage() {
       }
       setCls(found);
       setOpalUrl(found.opalCourseUrl || '');
+      setClassArchivedState(isClassArchived(found.id));
       document.title = `${found.name} — האוניברסיטה הפתוחה`;
     } catch {
       setNotFound(true);
@@ -84,7 +68,9 @@ export default function ClassDetailPage() {
 
   const loadLectures = useCallback(async () => {
     try {
-      const data: Lecture[] = await fetch(apiUrl(`/api/classes/${classId}/lectures`)).then((r) => r.json());
+      const data: Lecture[] = await fetch(
+        apiUrl(`/api/classes/${classId}/lectures`),
+      ).then((r) => r.json());
       setLectures(data);
     } catch {
       setLectures([]);
@@ -96,13 +82,14 @@ export default function ClassDetailPage() {
     loadLectures();
   }, [loadClass, loadLectures]);
 
-  // Polling when there are pending lectures not actively running locally
   useEffect(() => {
     if (!lectures) return;
-    const hasUntracked = lectures.some((l) => l.status === 'pending' && !running.has(l.id));
-    if (hasUntracked && !pollTimerRef.current) {
+    const hasInFlight = lectures.some(
+      (l) => IN_FLIGHT.has(l.status) || (l.status === 'pending' && runningIds.has(l.id)),
+    );
+    if (hasInFlight && !pollTimerRef.current) {
       pollTimerRef.current = setInterval(loadLectures, 5000);
-    } else if (!hasUntracked && pollTimerRef.current) {
+    } else if (!hasInFlight && pollTimerRef.current) {
       clearInterval(pollTimerRef.current);
       pollTimerRef.current = null;
     }
@@ -112,16 +99,24 @@ export default function ClassDetailPage() {
         pollTimerRef.current = null;
       }
     };
-  }, [lectures, running, loadLectures]);
+  }, [lectures, runningIds, loadLectures]);
 
-  const setRunningEntry = (id: string, entry: JobState | null) => {
-    setRunning((prev) => {
-      const next = new Map(prev);
-      if (entry) next.set(id, entry);
-      else next.delete(id);
-      return next;
+  const orderedLectures = useMemo(() => {
+    if (!lectures) return [] as (Lecture & { n: number })[];
+    const visible = lectures.filter((l) => !isLectureArchived(l.id));
+    void archivedRefresh;
+    const sorted = [...visible].sort((a, b) => {
+      const da = a.lectureDate ? new Date(a.lectureDate).getTime() : 0;
+      const db = b.lectureDate ? new Date(b.lectureDate).getTime() : 0;
+      if (da !== db) return da - db;
+      return a.name.localeCompare(b.name, 'he');
     });
-  };
+    return sorted.map((l, i) => ({ ...l, n: i + 1 }));
+  }, [lectures, archivedRefresh]);
+
+  const summarizedCount = orderedLectures.filter(
+    (l) => l.status === 'summarized' || l.status === 'done',
+  ).length;
 
   const saveOpalUrl = async () => {
     const r = await fetch(apiUrl(`/api/classes/${classId}`), {
@@ -129,184 +124,110 @@ export default function ClassDetailPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ opalCourseUrl: opalUrl.trim() }),
     });
-    if (r.ok) showToast('קישור OPAL נשמר');
-    else showToast('שגיאה בשמירה', true);
-  };
-
-  const stopJob = async (lectureId: string) => {
-    const job = running.get(lectureId);
-    if (!job || !job.type) return;
-    setRunningEntry(lectureId, { message: 'מבטל...', type: job.type });
-    try {
-      await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/abort`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: job.type }),
-      });
-    } catch {
-      /* ignore */
+    if (r.ok) {
+      showToast('קישור OPAL נשמר');
+      setEditingUrl(false);
+      if (cls) setCls({ ...cls, opalCourseUrl: opalUrl.trim() });
+    } else {
+      showToast('שגיאה בשמירה', true);
     }
   };
 
-  const stopJobByStatus = async (lectureId: string, type: 'transcribe' | 'summarize') => {
+  const syncNow = async () => {
     try {
-      await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/abort`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
-      });
-    } catch {
-      /* ignore */
-    }
-    await loadLectures();
-  };
-
-  const runPipeline = async (lectureId: string) => {
-    if (running.has(lectureId)) return;
-    setRunningEntry(lectureId, { message: 'בודק...', type: 'transcribe' });
-    try {
-      const [hasTranscript, hasSummary] = await Promise.all([
-        fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/transcript`)).then((r) => r.ok),
-        fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summary`)).then((r) => r.ok),
-      ]);
-
-      if (!hasTranscript) {
-        setRunningEntry(lectureId, { message: 'מתמלל...', type: 'transcribe' });
-        await streamSSE(
-          `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-          {},
-          (ev) => {
-            if (ev.type === 'progress') {
-              setRunningEntry(lectureId, { message: String(ev.message), type: 'transcribe' });
-            } else if (ev.type === 'aborted') {
-              throw new Error('aborted');
-            } else if (ev.type === 'error') {
-              throw new Error(String(ev.message));
-            }
-          },
-        );
-      }
-
-      if (!hasSummary) {
-        setRunningEntry(lectureId, { message: 'מסכם...', type: 'summarize' });
-        await streamSSE(
-          `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-          { backend },
-          (ev) => {
-            if (ev.type === 'progress') {
-              setRunningEntry(lectureId, { message: String(ev.message), type: 'summarize' });
-            } else if (ev.type === 'aborted') {
-              throw new Error('aborted');
-            } else if (ev.type === 'error') {
-              throw new Error(String(ev.message));
-            }
-          },
-        );
-      }
-
-      if (hasTranscript && hasSummary) {
-        setRunningEntry(lectureId, { message: 'הכל קיים', type: null });
-      } else {
-        showToast('הסיכום הושלם!');
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'שגיאה';
-      if (msg === 'aborted') showToast('הפעולה בוטלה');
-      else showToast(msg, true);
-    } finally {
-      setRunningEntry(lectureId, null);
+      showToast('סנכרון התחיל');
+      await streamSSE('/api/classes/sync', {}, () => {});
+      showToast('סנכרון הסתיים');
       loadLectures();
+    } catch {
+      showToast('שגיאה בסנכרון', true);
+    }
+  };
+
+  const toggleArchiveClass = () => {
+    const next = !classArchivedState;
+    setClassArchived(classId, next);
+    setClassArchivedState(next);
+    showToast(next ? 'הקורס בארכיון' : 'הקורס שוחזר');
+  };
+
+  const deleteClass = async () => {
+    if (!confirm('למחוק את הקורס וכל ההרצאות שלו?')) return;
+    const r = await fetch(apiUrl(`/api/classes/${classId}`), { method: 'DELETE' });
+    if (r.ok) {
+      showToast('הקורס נמחק');
+      router.push('/classes');
+    } else {
+      showToast('שגיאה במחיקה', true);
     }
   };
 
   const runSummarize = async (lectureId: string) => {
-    if (running.has(lectureId)) return;
-    setRunningEntry(lectureId, { message: 'מסכם...', type: 'summarize' });
+    setRunningIds((s) => new Set(s).add(lectureId));
     try {
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-        { backend },
+        {},
         (ev) => {
-          if (ev.type === 'progress') {
-            setRunningEntry(lectureId, { message: String(ev.message), type: 'summarize' });
-          } else if (ev.type === 'aborted') {
-            throw new Error('aborted');
-          } else if (ev.type === 'error') {
-            throw new Error(String(ev.message));
-          }
+          if (ev.type === 'aborted') throw new Error('aborted');
+          if (ev.type === 'error') throw new Error(String(ev.message));
         },
       );
-      showToast('הסיכום הושלם!');
+      showToast('הסיכום הושלם');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'שגיאה';
       if (msg === 'aborted') showToast('הפעולה בוטלה');
       else showToast(msg, true);
     } finally {
-      setRunningEntry(lectureId, null);
+      setRunningIds((s) => {
+        const next = new Set(s);
+        next.delete(lectureId);
+        return next;
+      });
       loadLectures();
     }
   };
 
-  const doSearch = async () => {
-    const q = searchQuery.trim();
-    if (!q) {
-      setSearchResults(null);
-      return;
-    }
-    setSearchResults('loading');
-    try {
-      const data: SearchResult[] = await fetch(
-        apiUrl(`/api/search?q=${encodeURIComponent(q)}&classId=${classId}`),
-      ).then((r) => r.json());
-      setSearchResults(data);
-    } catch {
-      setSearchResults('error');
-    }
-  };
-
-  const addLecture = async () => {
-    const name = newName.trim();
-    const url = newUrl.trim();
-    if (!name || !url) {
-      showToast('שם וקישור נדרשים', true);
-      return;
-    }
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, url, lectureDate: newDate || undefined }),
-    });
+  const retryLecture = async (lectureId: string) => {
+    const r = await fetch(
+      apiUrl(`/api/classes/${classId}/lectures/${lectureId}/retry`),
+      { method: 'POST' },
+    );
     if (r.ok) {
-      setAddOpen(false);
-      setNewName('');
-      setNewUrl('');
-      setNewDate('');
-      showToast('ההרצאה נוספה');
-      loadLectures();
-    } else {
-      const err = (await r.json().catch(() => ({}))) as { error?: string };
-      showToast(err.error || 'שגיאה', true);
-    }
-  };
-
-  const saveLecture = async () => {
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${editId}`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: editName.trim(), lectureDate: editDate || null }),
-    });
-    if (r.ok) {
-      setEditOpen(false);
-      showToast('נשמר');
+      showToast('הופעל מחדש');
       loadLectures();
     } else {
       showToast('שגיאה', true);
     }
   };
 
-  const deleteLecture = async (id: string) => {
+  const skipLecture = async (lectureId: string, currentStatus: string) => {
+    const route = currentStatus === 'skipped' ? 'unskip' : 'skip';
+    const r = await fetch(
+      apiUrl(`/api/classes/${classId}/lectures/${lectureId}/${route}`),
+      { method: 'POST' },
+    );
+    if (r.ok) {
+      showToast(route === 'skip' ? 'דולג' : 'הוחזר');
+      loadLectures();
+    } else {
+      showToast('שגיאה', true);
+    }
+  };
+
+  const archiveLecture = (lectureId: string) => {
+    const next = !isLectureArchived(lectureId);
+    setLectureArchived(lectureId, next);
+    setArchivedRefresh((n) => n + 1);
+    showToast(next ? 'בארכיון' : 'שוחזר');
+  };
+
+  const deleteLecture = async (lectureId: string) => {
     if (!confirm('למחוק את ההרצאה?')) return;
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${id}`), { method: 'DELETE' });
+    const r = await fetch(
+      apiUrl(`/api/classes/${classId}/lectures/${lectureId}`),
+      { method: 'DELETE' },
+    );
     if (r.ok) {
       showToast('נמחק');
       loadLectures();
@@ -315,314 +236,195 @@ export default function ClassDetailPage() {
     }
   };
 
-  const openEditModal = (l: Lecture) => {
-    setEditId(l.id);
-    setEditName(l.name);
-    setEditDate(l.lectureDate || '');
-    setEditOpen(true);
-  };
+  if (notFound) {
+    return <div className="page">קורס לא נמצא</div>;
+  }
+  if (!cls) {
+    return <div className="page">טוען...</div>;
+  }
 
-  const renderActions = (l: Lecture) => {
-    const job = running.get(l.id);
-    if (job) {
-      return (
-        <button className="btn btn-sm btn-danger" onClick={() => stopJob(l.id)}>
-          ⏹ עצור
-        </button>
-      );
-    }
-    const abortType = STATUS_ABORT_TYPE[l.status];
-    const btns: React.ReactNode[] = [];
-
-    if (abortType) {
-      btns.push(
-        <button
-          key="stop"
-          className="btn btn-sm btn-danger"
-          onClick={() => stopJobByStatus(l.id, abortType)}
-        >
-          ⏹ עצור
-        </button>,
-      );
-    } else if (l.status === 'pending') {
-      btns.push(
-        <button key="run" className="btn btn-sm" data-testid="run-pipeline-btn" onClick={() => runPipeline(l.id)}>
-          ▶ סכם
-        </button>,
-      );
-    } else if (l.status === 'transcribed') {
-      btns.push(
-        <button key="run" className="btn btn-sm" onClick={() => runSummarize(l.id)}>
-          ▶ סכם
-        </button>,
-      );
-    } else if (l.status === 'summarized') {
-      btns.push(
-        <button
-          key="resum"
-          className="btn btn-sm btn-outline"
-          onClick={() => runSummarize(l.id)}
-        >
-          🔄 סכם מחדש
-        </button>,
-      );
-      btns.push(
-        <Link
-          key="view"
-          className="btn btn-sm btn-outline"
-          href={`/classes/${classId}/lectures/${l.id}`}
-        >
-          👁 צפה
-        </Link>,
-      );
-    } else if (l.status === 'error' || l.status === 'aborted' || l.status === 'failed') {
-      btns.push(
-        <button key="retry" className="btn btn-sm" onClick={() => runPipeline(l.id)}>
-          ↩ נסה שנית
-        </button>,
-      );
-    }
-    btns.push(
-      <button
-        key="edit"
-        className="btn btn-sm btn-outline"
-        onClick={() => openEditModal(l)}
-      >
-        ✏️
-      </button>,
-    );
-    btns.push(
-      <button
-        key="delete"
-        className="btn btn-sm btn-danger"
-        data-testid="delete-lecture-btn"
-        onClick={() => deleteLecture(l.id)}
-      >
-        🗑
-      </button>,
-    );
-    return btns;
-  };
-
-  const headerTitle = notFound ? 'קורס לא נמצא' : cls?.name || 'טוען...';
-  const headerMeta = cls
-    ? [cls.semester ? SEMESTER_HE[cls.semester] : '', cls.year || ''].filter(Boolean).join(' ')
-    : '';
+  const meta = [cls.semester ? SEMESTER_HE[cls.semester] || cls.semester : '', cls.year || '']
+    .filter(Boolean)
+    .join(' ');
+  const color = getClassColor(cls.id);
 
   return (
-    <div className="page-class-detail">
-      <PageHeader>
-        <Link className="back" href="/classes">
-          ← חזרה לקורסים
-        </Link>
-        <h1>{headerTitle}</h1>
-        <p>{headerMeta}</p>
-      </PageHeader>
+    <div className="page fade-in">
+      <div className="detail-h" data-color={color}>
+        <div className="detail-h__mark">{classIcon(cls.name)}</div>
+        <div className="detail-h__body">
+          <div className="detail-h__code">— · האוניברסיטה הפתוחה</div>
+          <h1 className="detail-h__title">{cls.name}</h1>
+          <div className="detail-h__meta">
+            {meta && (
+              <>
+                <span>{meta}</span>
+                <span style={{ opacity: 0.4 }}>·</span>
+              </>
+            )}
+            <span>{lectures?.length ?? 0} הרצאות</span>
+            <span style={{ opacity: 0.4 }}>·</span>
+            <span>{summarizedCount} מסוכמות</span>
+          </div>
+        </div>
+        <div className="detail-h__actions">
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={syncNow}
+            title="סנכרון הרצאות חדשות"
+          >
+            ⟳ סנכרן
+          </button>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={toggleArchiveClass}
+            title={classArchivedState ? 'שחזר מארכיון' : 'העבר לארכיון'}
+          >
+            {classArchivedState ? '↺' : '🗄'}
+          </button>
+          <button
+            className="btn btn--ghost btn--sm"
+            onClick={deleteClass}
+            title="מחק קורס"
+          >
+            🗑
+          </button>
+        </div>
+      </div>
 
-      <main>
-        <div className="card">
-          <div className="search-row">
+      <div style={{ marginBottom: 'var(--gap-lg)' }}>
+        {editingUrl ? (
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <input
-              type="text"
-              className="search-input"
-              placeholder="חיפוש בתמלולים..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              type="url"
+              dir="ltr"
+              autoFocus
+              value={opalUrl}
+              onChange={(e) => setOpalUrl(e.target.value)}
+              onBlur={saveOpalUrl}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') doSearch();
+                if (e.key === 'Enter') saveOpalUrl();
+                if (e.key === 'Escape') {
+                  setOpalUrl(cls.opalCourseUrl || '');
+                  setEditingUrl(false);
+                }
+              }}
+              placeholder="https://opal.openu.ac.il/course/..."
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                border: '1px solid var(--line)',
+                borderRadius: 8,
+                background: 'var(--surface)',
+                font: '0.85rem/1 var(--font-mono)',
               }}
             />
-            <button className="btn" onClick={doSearch}>
-              חפש
-            </button>
           </div>
-          {searchResults === 'loading' && <p className="search-msg">מחפש...</p>}
-          {searchResults === 'error' && (
-            <p className="search-msg search-msg--error">שגיאה בחיפוש</p>
-          )}
-          {Array.isArray(searchResults) && searchResults.length === 0 && (
-            <p className="search-msg">לא נמצאו תוצאות</p>
-          )}
-          {Array.isArray(searchResults) &&
-            searchResults.map((r) => (
-              <Link
-                key={r.lectureId}
-                href={`/classes/${classId}/lectures/${r.lectureId}`}
-                className="search-result-item"
-                style={{ display: 'block' }}
-              >
-                <div className="search-result-name">{r.lectureName}</div>
-                <div className="search-result-snippet">...{r.snippet}...</div>
-              </Link>
-            ))}
-        </div>
-
-        {cls && (
-          <div className="card">
-            <div className="section-title">קישור OPAL לזיהוי אוטומטי</div>
-            <div className="opal-row">
-              <input
-                type="url"
-                className="form-input"
-                dir="ltr"
-                placeholder="https://opal.openu.ac.il/course/view.php?id=..."
-                value={opalUrl}
-                onChange={(e) => setOpalUrl(e.target.value)}
-              />
-              <button className="btn" onClick={saveOpalUrl}>
-                שמור
-              </button>
-            </div>
-            <p className="opal-hint">
-              קישור לדף הקורס ב-OPAL — נדרש לזיהוי אוטומטי של הרצאות חדשות
-            </p>
-          </div>
+        ) : (
+          <button
+            onClick={() => setEditingUrl(true)}
+            style={{
+              font: '0.85rem/1.4 var(--font-mono)',
+              color: 'var(--muted)',
+              textAlign: 'start',
+              direction: 'ltr',
+              cursor: 'text',
+            }}
+          >
+            {cls.opalCourseUrl || '+ הוסף קישור OPAL'}
+          </button>
         )}
+      </div>
 
-        <div className="card">
-          <div className="card-header">
-            <h2>הרצאות</h2>
-            <div className="header-actions">
-              <BackendSelect value={backend} onChange={setBackend} />
-              <button className="btn" data-testid="add-lecture-btn" onClick={() => setAddOpen(true)}>
-                + הוסף הרצאה
-              </button>
-            </div>
-          </div>
-
-          {lectures === null && <EmptyState message="טוען..." loading />}
-
-          {lectures?.length === 0 && (
-            <EmptyState message="אין הרצאות עדיין" icon="🎬">
-              <button className="btn" onClick={() => setAddOpen(true)}>
-                + הוסף הרצאה ראשונה
-              </button>
-            </EmptyState>
-          )}
-
-          {lectures && lectures.length > 0 && (
-            <table>
-              <thead>
-                <tr>
-                  <th>תאריך</th>
-                  <th>שם</th>
-                  <th>סטטוס</th>
-                  <th>פעולות</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lectures.map((l) => {
-                  const date = l.lectureDate
-                    ? new Date(l.lectureDate).toLocaleDateString('he-IL')
-                    : '—';
-                  const job = running.get(l.id);
-                  return (
-                    <tr key={l.id} data-testid="lecture-row">
-                      <td className="td-date">{date}</td>
-                      <td>
-                        <Link
-                          href={`/classes/${classId}/lectures/${l.id}`}
-                          className="lecture-link"
-                        >
-                          {l.name}
-                        </Link>
-                      </td>
-                      <td className="col-status">
-                        {job ? (
-                          <StatusBadge status={l.status} message={job.message} spinner />
-                        ) : (
-                          <StatusBadge status={l.status} />
-                        )}
-                      </td>
-                      <td className="col-actions">
-                        <div className="actions">{renderActions(l)}</div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+      {lectures === null ? (
+        <div style={{ color: 'var(--muted)' }}>טוען...</div>
+      ) : orderedLectures.length === 0 ? (
+        <div style={{ color: 'var(--muted)', padding: 'var(--gap-lg) 0' }}>
+          אין הרצאות עדיין. נסה לסנכרן את הקורס.
         </div>
-      </main>
-
-      {/* Add lecture modal */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)}>
-        <h3>הרצאה חדשה</h3>
-        <div className="form-group">
-          <label>שם ההרצאה *</label>
-          <input
-            type="text"
-            className="form-input"
-            data-testid="lecture-name-input"
-            placeholder="למשל: הרצאה 3 — מבוא ל-ANOVA"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
+      ) : (
+        <div className="timeline">
+          {orderedLectures.map((l) => {
+            const current = IN_FLIGHT.has(l.status);
+            const failed = l.status === 'failed' || l.status === 'error' || l.status === 'aborted';
+            const showProgress = l.status === 'transcribing' || l.status === 'summarizing' || l.status === 'processing';
+            return (
+              <div
+                key={l.id}
+                className="tl-item"
+                data-status={l.status}
+                data-current={current ? '' : undefined}
+              >
+                <div className="tl-item__dot" />
+                <article
+                  className="lec-card"
+                  data-current={current ? '' : undefined}
+                  onClick={() => router.push(`/classes/${classId}/lectures/${l.id}`)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="lec-card__num">{String(l.n).padStart(2, '0')}</div>
+                  <div>
+                    <div className="lec-card__title">{l.name}</div>
+                    <div className="lec-card__meta">
+                      <span>{fmtDateLong(l.lectureDate)}</span>
+                      <span style={{ opacity: 0.4 }}>·</span>
+                      <Status s={l.status} />
+                    </div>
+                  </div>
+                  <div className="lec-card__actions" onClick={(e) => e.stopPropagation()}>
+                    {l.status === 'transcribed' && (
+                      <button
+                        className="btn btn--sm"
+                        onClick={() => runSummarize(l.id)}
+                        title="סכם"
+                      >
+                        ▶ סכם
+                      </button>
+                    )}
+                    {failed && (
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => retryLecture(l.id)}
+                        title="נסה שנית"
+                      >
+                        ↻ נסה שנית
+                      </button>
+                    )}
+                    {(l.status === 'pending' || l.status === 'skipped') && (
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => skipLecture(l.id, l.status)}
+                        title={l.status === 'skipped' ? 'בטל דילוג' : 'דלג'}
+                      >
+                        {l.status === 'skipped' ? '↺ בטל דילוג' : '⤳ דלג'}
+                      </button>
+                    )}
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => archiveLecture(l.id)}
+                      title="העבר לארכיון"
+                    >
+                      🗄
+                    </button>
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={() => deleteLecture(l.id)}
+                      title="מחק"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                  {showProgress && (
+                    <div className="lec-card__progress">
+                      <span style={{ width: l.status === 'summarizing' ? '70%' : '40%' }} />
+                    </div>
+                  )}
+                </article>
+              </div>
+            );
+          })}
         </div>
-        <div className="form-group">
-          <label>קישור להרצאה *</label>
-          <input
-            type="url"
-            className="form-input"
-            data-testid="lecture-url-input"
-            dir="ltr"
-            placeholder="https://opal.openu.ac.il/..."
-            value={newUrl}
-            onChange={(e) => setNewUrl(e.target.value)}
-          />
-        </div>
-        <div className="form-group">
-          <label>תאריך הרצאה</label>
-          <input
-            type="date"
-            className="form-input"
-            dir="ltr"
-            value={newDate}
-            onChange={(e) => setNewDate(e.target.value)}
-          />
-        </div>
-        <div className="modal-actions">
-          <button className="btn btn-outline" onClick={() => setAddOpen(false)}>
-            ביטול
-          </button>
-          <button className="btn" data-testid="add-lecture-submit" onClick={addLecture}>
-            הוסף
-          </button>
-        </div>
-      </Modal>
-
-      {/* Edit lecture modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)}>
-        <h3>עריכת הרצאה</h3>
-        <div className="form-group">
-          <label>שם ההרצאה</label>
-          <input
-            type="text"
-            className="form-input"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-          />
-        </div>
-        <div className="form-group">
-          <label>תאריך</label>
-          <input
-            type="date"
-            className="form-input"
-            dir="ltr"
-            value={editDate}
-            onChange={(e) => setEditDate(e.target.value)}
-          />
-        </div>
-        <div className="modal-actions">
-          <button className="btn btn-outline" onClick={() => setEditOpen(false)}>
-            ביטול
-          </button>
-          <button className="btn" onClick={saveLecture}>
-            שמור
-          </button>
-        </div>
-      </Modal>
+      )}
 
       {toastEl}
     </div>

@@ -1,18 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { marked } from 'marked';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
-import { PageHeader } from '@/app/components/PageHeader';
 import { useToast } from '@/app/components/Toast';
-import { StatusBadge } from '@/app/components/StatusBadge';
 import { BackendSelect } from '@/app/components/BackendSelect';
 import { QASection } from '@/app/components/QASection';
 import type { QAState } from '@/app/components/QASection';
 import type { Backend } from '@/app/components/BackendSelect';
+import { Status, fmtDateLong } from '@/app/components/Status';
 
 interface LectureMeta {
   id: string;
@@ -42,11 +40,13 @@ type JobType = 'transcribe' | 'summarize';
 
 export default function LecturePage() {
   const params = useParams<{ classId: string; lectureId: string }>();
+  const router = useRouter();
   const classId = params.classId;
   const lectureId = params.lectureId;
   const { show: showToast, element: toastEl } = useToast();
 
   const [lecture, setLecture] = useState<LectureMeta | null>(null);
+  const [className, setClassName] = useState<string>('');
   const [notFound, setNotFound] = useState(false);
   const [summary, setSummary] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -62,8 +62,9 @@ export default function LecturePage() {
   const [jobActive, setJobActive] = useState(false);
   const [currentJobType, setCurrentJobType] = useState<JobType | null>(null);
   const [actionLabel, setActionLabel] = useState('🔄 סכם מחדש');
-  const [retranscribeLabel, setRetranscribeLabel] = useState('🔄 תמלל מחדש');
-  const [retranscribeTestLabel, setRetranscribeTestLabel] = useState('🧪 תמלל 30 דקות (בדיקה)');
+  const [retranscribeLabel, setRetranscribeLabel] = useState('↻ תמלל מחדש');
+  const [retranscribeTestLabel, setRetranscribeTestLabel] = useState('🧪 תמלל 30 דקות');
+  const [progressPct, setProgressPct] = useState(0);
   const streamBufferRef = useRef('');
 
   const loadLecture = useCallback(async () => {
@@ -82,12 +83,22 @@ export default function LecturePage() {
     }
   }, [classId, lectureId]);
 
+  const loadClassName = useCallback(async () => {
+    try {
+      const data: { name?: string } = await fetch(apiUrl(`/api/classes/${classId}`)).then((r) =>
+        r.json(),
+      );
+      if (data?.name) setClassName(data.name);
+    } catch {
+      /* ignore */
+    }
+  }, [classId]);
+
   const loadSummary = useCallback(async () => {
     try {
       const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summary`));
       if (!r.ok) return;
-      const text = await r.text();
-      setSummary(text);
+      setSummary(await r.text());
     } catch {
       /* ignore */
     }
@@ -106,7 +117,8 @@ export default function LecturePage() {
 
   useEffect(() => {
     loadLecture();
-  }, [loadLecture]);
+    loadClassName();
+  }, [loadLecture, loadClassName]);
 
   useEffect(() => {
     if (!lecture) return;
@@ -114,17 +126,35 @@ export default function LecturePage() {
     loadHistory();
   }, [lecture, loadSummary, loadHistory]);
 
+  useEffect(() => {
+    const onScroll = () => {
+      const sc = document.documentElement.scrollTop || document.body.scrollTop;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setProgressPct(max > 0 ? Math.min(100, (sc / max) * 100) : 0);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const summaryHtml = useMemo(
+    () => (summary ? (marked.parse(summary) as string) : ''),
+    [summary],
+  );
+
+  const readingMinutes = useMemo(() => {
+    if (!summary) return 0;
+    const words = summary.trim().split(/\s+/).length;
+    return Math.max(1, Math.round(words / 200));
+  }, [summary]);
+
   const toggleTranscript = async () => {
     const next = !transcriptOpen;
     setTranscriptOpen(next);
     if (next && transcript === null) {
       try {
         const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/transcript`));
-        if (!r.ok) {
-          setTranscript('אין תמלול זמין');
-          return;
-        }
-        setTranscript(await r.text());
+        setTranscript(r.ok ? await r.text() : 'אין תמלול זמין');
       } catch {
         setTranscript('אין תמלול זמין');
       }
@@ -214,7 +244,7 @@ export default function LecturePage() {
     setJobActive(true);
     setCurrentJobType('transcribe');
     const setLbl = test ? setRetranscribeTestLabel : setRetranscribeLabel;
-    const restoreLbl = test ? '🧪 תמלל 30 דקות (בדיקה)' : '🔄 תמלל מחדש';
+    const restoreLbl = test ? '🧪 תמלל 30 דקות' : '↻ תמלל מחדש';
     try {
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
@@ -226,7 +256,6 @@ export default function LecturePage() {
         },
       );
       showToast('התמלול הושלם!');
-      // refresh transcript
       try {
         const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/transcript`));
         if (r.ok) setTranscript(await r.text());
@@ -252,11 +281,8 @@ export default function LecturePage() {
     const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}`), {
       method: 'DELETE',
     });
-    if (r.ok) {
-      window.location.href = `/classes/${classId}`;
-    } else {
-      showToast('שגיאה במחיקה', true);
-    }
+    if (r.ok) router.push(`/classes/${classId}`);
+    else showToast('שגיאה במחיקה', true);
   };
 
   const copyToClipboard = async () => {
@@ -381,255 +407,310 @@ export default function LecturePage() {
     }
   };
 
-  const headerTitle = notFound ? 'הרצאה לא נמצאה' : lecture?.name || 'טוען...';
-  const headerDate = lecture?.lectureDate
-    ? new Date(lecture.lectureDate).toLocaleDateString('he-IL')
-    : '';
+  if (notFound) {
+    return (
+      <div className="page fade-in">
+        <div className="display-h">
+          <h1 className="display-h__title">הרצאה לא נמצאה</h1>
+        </div>
+      </div>
+    );
+  }
+
+  const headerDate = lecture?.lectureDate ? fmtDateLong(lecture.lectureDate) : '';
 
   return (
-    <div className="page-lecture">
-      <PageHeader>
-        <Link className="back" href={`/classes/${classId}`}>
-          ← חזרה לקורס
-        </Link>
-        <h1>{headerTitle}</h1>
-        <p>{headerDate}</p>
-      </PageHeader>
+    <div className="page lec-page fade-in">
+      <div className="lec-progress">
+        <span style={{ width: progressPct + '%' }} />
+      </div>
 
-      <main>
-        {/* Summary column */}
+      <div className="lec-h">
         <div>
-          <div className="card">
-            <div className="summary-header">
-              <div className="summary-title-group">
-                <h2>📝 סיכום</h2>
+          <div className="lec-h__eye">
+            <a
+              href={`/classes/${classId}`}
+              onClick={(e) => {
+                e.preventDefault();
+                router.push(`/classes/${classId}`);
+              }}
+              style={{ color: 'inherit' }}
+            >
+              {className || 'קורס'}
+            </a>
+          </div>
+          <h1 className="lec-h__title">{lecture?.name || 'טוען...'}</h1>
+          <div className="lec-h__meta">
+            {headerDate && <span>{headerDate}</span>}
+            {readingMinutes > 0 && (
+              <>
+                <span className="dot" />
+                <span>~{readingMinutes} דקות קריאה</span>
+              </>
+            )}
+            {lecture && (
+              <>
+                <span className="dot" />
+                <Status s={lecture.status} />
+              </>
+            )}
+          </div>
+        </div>
+        <div className="lec-h__actions">
+          <button className="btn btn--ghost btn--sm" onClick={toggleTranscript}>
+            📜 תמלול
+          </button>
+          <button className="btn btn--ghost btn--sm" onClick={() => setHistoryOpen((o) => !o)}>
+            🕓 גרסאות {history.versions.length ? `(${history.versions.length})` : ''}
+          </button>
+          <button className="btn btn--ghost btn--sm" onClick={downloadMd} disabled={!summary}>
+            ↗ ייצוא
+          </button>
+        </div>
+      </div>
+
+      <div className="lec-grid lec-grid--split">
+        <div>
+          {summary ? (
+            <>
+              <div className="summary-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 {streaming && (
                   <span className="streaming-badge">
-                    <span className="dot" />
-                    מסכם...
+                    <span className="dot" /> מסכם...
                   </span>
                 )}
+                <div style={{ marginInlineStart: 'auto', display: 'flex', gap: 8 }}>
+                  <button className="btn btn--ghost btn--sm" onClick={copyToClipboard}>
+                    העתק
+                  </button>
+                  <button className="btn btn--ghost btn--sm" onClick={downloadMd}>
+                    הורד .md
+                  </button>
+                </div>
               </div>
-              <div className="btn-group">
-                <button className="btn btn-outline" onClick={copyToClipboard}>
-                  העתק
-                </button>
-                <button className="btn btn-outline" onClick={downloadMd}>
-                  הורד .md
-                </button>
-              </div>
-            </div>
-
-            {summary ? (
               <div
-                className="summary-body"
+                className="summary"
                 data-testid="summary-body"
-                dangerouslySetInnerHTML={{ __html: marked.parse(summary) as string }}
+                dangerouslySetInnerHTML={{ __html: summaryHtml }}
               />
-            ) : (
-              <div className="no-summary">
-                <p>אין סיכום עדיין</p>
-                <button className="btn" data-testid="summarize-btn" onClick={runSummarize}>
-                  ▶ סכם עכשיו
-                </button>
-              </div>
-            )}
-
-            {/* Summary history */}
-            <div className="transcript-toggle" onClick={() => setHistoryOpen((o) => !o)}>
-              <span className={`transcript-arrow${historyOpen ? ' open' : ''}`}>▼</span>
-              <span>היסטוריית סיכומים</span>
-              <span
-                style={{
-                  marginRight: 'auto',
-                  fontSize: '0.75rem',
-                  color: 'var(--muted)',
-                  fontWeight: 400,
-                }}
-              >
-                {history.versions.length ? `(${history.versions.length})` : ''}
-              </span>
+            </>
+          ) : (
+            <div className="summary" style={{ textAlign: 'center', padding: '40px 0' }}>
+              <p style={{ color: 'var(--muted)', marginBottom: 16 }}>אין סיכום עדיין</p>
+              <button className="btn" data-testid="summarize-btn" onClick={runSummarize}>
+                ▶ סכם עכשיו
+              </button>
             </div>
-            {historyOpen && (
-              <div>
-                {history.versions.length === 0 && (
-                  <div
-                    style={{
-                      padding: '12px 0',
-                      color: 'var(--muted)',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    אין סיכומים שמורים
-                  </div>
-                )}
-                {history.versions.map((v) => {
+          )}
+
+          {historyOpen && (
+            <section className="lec-aside__meta" style={{ marginTop: 24 }}>
+              <div className="lec-aside__title">היסטוריית סיכומים</div>
+              {history.versions.length === 0 ? (
+                <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
+                  אין סיכומים שמורים
+                </div>
+              ) : (
+                history.versions.map((v) => {
                   const isCurrent = v.id === history.currentSummary;
                   const date = new Date(v.date).toLocaleString('he-IL');
                   return (
                     <div
                       key={v.id}
-                      className={`history-item${isCurrent ? ' history-current' : ''}`}
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'center',
+                        padding: '10px 0',
+                        borderTop: '1px dashed var(--line-2)',
+                      }}
                     >
-                      <div className="history-item-info">
-                        {isCurrent && (
-                          <span
-                            className="badge badge-summarized"
-                            style={{ fontSize: '0.7rem', padding: '2px 7px' }}
-                          >
-                            נוכחי
-                          </span>
-                        )}
-                        <span className="history-date">{date}</span>
-                        <span className="history-backend">
-                          {v.backend}{v.model ? ` · ${v.model}` : ''}
-                        </span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.85rem' }}>
+                          {isCurrent && (
+                            <span
+                              className="status status--summarized"
+                              style={{ fontSize: '0.7rem', marginInlineEnd: 6 }}
+                            >
+                              נוכחי
+                            </span>
+                          )}
+                          {date}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                          {v.backend}
+                          {v.model ? ` · ${v.model}` : ''}
+                        </div>
                       </div>
-                      <div className="history-item-actions">
+                      <button className="btn btn--ghost btn--sm" onClick={() => viewSummaryVersion(v.id)}>
+                        הצג
+                      </button>
+                      {!isCurrent && (
                         <button
-                          className="btn btn-outline btn-xs"
-                          onClick={() => viewSummaryVersion(v.id)}
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => setCurrentSummaryVersion(v.id)}
                         >
-                          הצג
+                          הגדר כנוכחי
                         </button>
-                        {!isCurrent && (
-                          <button
-                            className="btn btn-outline btn-xs"
-                            onClick={() => setCurrentSummaryVersion(v.id)}
-                          >
-                            הגדר כנוכחי
-                          </button>
-                        )}
-                        <button
-                          className="btn btn-danger btn-xs"
-                          onClick={() => deleteSummaryVersion(v.id)}
-                        >
-                          מחק
-                        </button>
-                      </div>
+                      )}
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => deleteSummaryVersion(v.id)}
+                      >
+                        מחק
+                      </button>
                     </div>
                   );
-                })}
+                })
+              )}
+            </section>
+          )}
+
+          {transcriptOpen && (
+            <section className="lec-aside__meta" style={{ marginTop: 24 }}>
+              <div className="lec-aside__title">תמלול מלא</div>
+              <div
+                style={{
+                  whiteSpace: 'pre-wrap',
+                  fontSize: '0.85rem',
+                  color: 'var(--muted)',
+                  maxHeight: 400,
+                  overflow: 'auto',
+                }}
+              >
+                {transcript ?? 'טוען תמלול...'}
               </div>
-            )}
+            </section>
+          )}
 
-            {/* Transcript */}
-            <div className="transcript-toggle" onClick={toggleTranscript}>
-              <span className={`transcript-arrow${transcriptOpen ? ' open' : ''}`}>▼</span>
-              <span>תמלול מלא</span>
-            </div>
-            {transcriptOpen && (
-              <div className="transcript-body">{transcript ?? 'טוען תמלול...'}</div>
-            )}
-
-            {/* Q&A */}
-            {lecture?.currentSummary && (
-              <>
-                <div className="transcript-toggle" onClick={toggleQA}>
-                  <span className={`transcript-arrow${qaOpen ? ' open' : ''}`}>▼</span>
-                  <span>🧠 שאלות ותשובות</span>
-                </div>
-                {qaOpen && (
-                  <div style={{ padding: '16px 0' }}>
-                    <QASection
-                      qa={qa}
-                      answers={qaAnswers}
-                      onAnswerChange={(i, v) => {
-                        const next = [...qaAnswers];
-                        next[i] = v;
-                        setQaAnswers(next);
-                      }}
-                      onStartNewRound={startNewQARound}
-                      onSubmit={submitAnswers}
-                      submitting={qaSubmitting}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          {lecture?.currentSummary && (
+            <section className="qa qa--inline" style={{ marginTop: 24 }}>
+              <div className="qa__h">
+                <h2 className="qa__title">🧠 שאלות ותשובות</h2>
+                <button className="btn btn--ghost btn--sm" onClick={toggleQA}>
+                  {qaOpen ? 'סגור' : 'פתח'}
+                </button>
+              </div>
+              {qaOpen && (
+                <QASection
+                  qa={qa}
+                  answers={qaAnswers}
+                  onAnswerChange={(i, v) => {
+                    const next = [...qaAnswers];
+                    next[i] = v;
+                    setQaAnswers(next);
+                  }}
+                  onStartNewRound={startNewQARound}
+                  onSubmit={submitAnswers}
+                  submitting={qaSubmitting}
+                />
+              )}
+            </section>
+          )}
         </div>
 
-        {/* Sidebar */}
-        <div className="sidebar">
-          <div className="card">
-            <div className="card-title">פרטים</div>
-            <div className="meta-item">
-              <div className="meta-label">סטטוס</div>
-              <div className="meta-value">
-                {lecture ? <StatusBadge status={lecture.status} /> : '—'}
+        <aside className="lec-aside">
+          <div className="lec-aside__meta">
+            <div className="lec-aside__title">פרטי ההרצאה</div>
+            <dl>
+              <div className="lec-aside__row">
+                <dt>תאריך</dt>
+                <dd>{headerDate || '—'}</dd>
               </div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">תאריך הרצאה</div>
-              <div className="meta-value">
-                {lecture?.lectureDate
-                  ? new Date(lecture.lectureDate).toLocaleDateString('he-IL')
-                  : '—'}
+              <div className="lec-aside__row">
+                <dt>תמלול</dt>
+                <dd>{lecture?.whisperBackend || '—'}</dd>
               </div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">תמלול</div>
-              <div className="meta-value">{lecture?.whisperBackend || '—'}</div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">סיכום</div>
-              <div className="meta-value">
-                {lecture?.summarizeBackend
-                  ? `${lecture.summarizeBackend}${lecture.summarizeModel ? ` · ${lecture.summarizeModel}` : ''}`
-                  : '—'}
+              <div className="lec-aside__row">
+                <dt>סיכום</dt>
+                <dd>
+                  {lecture?.summarizeBackend
+                    ? `${lecture.summarizeBackend}${lecture.summarizeModel ? ` · ${lecture.summarizeModel}` : ''}`
+                    : '—'}
+                </dd>
               </div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">תאריך סיכום</div>
-              <div className="meta-value">
-                {lecture?.summarizedAt
-                  ? new Date(lecture.summarizedAt).toLocaleString('he-IL')
-                  : '—'}
+              <div className="lec-aside__row">
+                <dt>סוכם בתאריך</dt>
+                <dd>
+                  {lecture?.summarizedAt
+                    ? new Date(lecture.summarizedAt).toLocaleString('he-IL')
+                    : '—'}
+                </dd>
               </div>
-            </div>
+              {summary && (
+                <div className="lec-aside__row">
+                  <dt>זמן קריאה</dt>
+                  <dd>~{readingMinutes} דקות</dd>
+                </div>
+              )}
+            </dl>
           </div>
 
-          <div className="card">
-            <div className="card-title">פעולות</div>
-            <div className="action-stack">
-              <div>
-                <label className="field-label">מודל AI</label>
-                <BackendSelect value={backend} onChange={setBackend} className="select-field select-field--full" />
-              </div>
-              <button className="btn" onClick={runSummarize} disabled={jobActive}>
+          <div className="lec-aside__meta">
+            <div className="lec-aside__title">פעולות</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label
+                style={{ fontSize: '0.78rem', color: 'var(--muted)' }}
+              >
+                מודל AI
+              </label>
+              <BackendSelect
+                value={backend}
+                onChange={setBackend}
+                className="select-field select-field--full"
+              />
+              <button
+                className="btn"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={runSummarize}
+                disabled={jobActive}
+              >
                 {actionLabel}
               </button>
               <button
-                className="btn btn-outline"
+                className="btn btn--ghost btn--sm"
+                style={{ width: '100%', justifyContent: 'center' }}
                 onClick={() => runRetranscribe(false)}
                 disabled={jobActive}
               >
                 {retranscribeLabel}
               </button>
               <button
-                className="btn btn-outline"
+                className="btn btn--ghost btn--sm"
+                style={{ width: '100%', justifyContent: 'center' }}
                 onClick={() => runRetranscribe(true)}
                 disabled={jobActive}
               >
                 {retranscribeTestLabel}
               </button>
               {jobActive && (
-                <button className="btn btn-danger" onClick={stopJob}>
+                <button
+                  className="btn"
+                  style={{
+                    width: '100%',
+                    justifyContent: 'center',
+                    background: 'var(--st-error)',
+                    color: 'white',
+                  }}
+                  onClick={stopJob}
+                >
                   ⏹ עצור
                 </button>
               )}
-              <hr className="action-divider" />
-              <button className="btn btn-danger" onClick={deleteLecture}>
+              <hr style={{ border: 0, borderTop: '1px dashed var(--line-2)', margin: '4px 0' }} />
+              <button
+                className="btn btn--ghost btn--sm"
+                style={{ width: '100%', justifyContent: 'center', color: 'var(--st-error)' }}
+                onClick={deleteLecture}
+              >
                 🗑 מחק הרצאה
               </button>
             </div>
           </div>
-        </div>
-      </main>
+        </aside>
+      </div>
 
       {toastEl}
     </div>
   );
 }
-

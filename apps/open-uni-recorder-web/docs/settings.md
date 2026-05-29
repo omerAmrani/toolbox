@@ -28,9 +28,10 @@ Single-page control panel at `/settings` for managing app configuration, the pro
 - "בדוק הרצאות חדשות" runs `POST /api/classes/sync` (SSE)
 - Shows per-class results: existing lectures with status, new lectures with queue/skip buttons
 - Only shown for classes with `opalCourseUrl` configured
+- List area (sync results + archive) is capped at 320px with internal scroll to avoid stretching the adjacent settings card
 
 **Archive:**
-- Lists all `skipped` lectures across all classes
+- Lists all `skipped` lectures across all classes (inside the same scrollable area as sync results)
 - "↩ הוצא מארכיון" unskips a lecture back to `pending`
 
 **Email test:**

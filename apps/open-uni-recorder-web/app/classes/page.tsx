@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
-import { PageHeader } from '@/app/components/PageHeader';
-import { Modal } from '@/app/components/Modal';
-import { useToast } from '@/app/components/Toast';
-import { EmptyState } from '@/app/components/EmptyState';
+import { getClassColor, isClassArchived, classIcon } from '@/lib/classMeta';
+import NewCourseModal from '@/app/components/NewCourseModal';
 
 interface ClassRow {
   id: string;
@@ -17,15 +15,19 @@ interface ClassRow {
   lectureCount: number;
 }
 
+interface LectureRow {
+  id: string;
+  status: string;
+}
+
+const SEMESTER_ORDER: Record<string, number> = { spring: 4, winter: 3, fall: 2, summer: 1 };
+
 export default function ClassesPage() {
   const router = useRouter();
-  const { show: showToast, element: toastEl } = useToast();
   const [classes, setClasses] = useState<ClassRow[] | null>(null);
+  const [lecturesByClass, setLecturesByClass] = useState<Record<string, LectureRow[]>>({});
   const [modalOpen, setModalOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [semester, setSemester] = useState('');
-  const [year, setYear] = useState('');
-  const nameInputRef = useRef<HTMLInputElement>(null);
+  const [filter, setFilter] = useState<'all' | 'active' | 'archive'>('all');
 
   const loadClasses = async () => {
     try {
@@ -33,7 +35,6 @@ export default function ClassesPage() {
       setClasses(data);
     } catch {
       setClasses([]);
-      showToast('שגיאה בטעינת הקורסים', true);
     }
   };
 
@@ -42,166 +43,188 @@ export default function ClassesPage() {
   }, []);
 
   useEffect(() => {
-    if (modalOpen) setTimeout(() => nameInputRef.current?.focus(), 100);
-  }, [modalOpen]);
-
-  const closeModal = () => {
-    setModalOpen(false);
-    setName('');
-    setSemester('');
-    setYear('');
-  };
-
-  const createClass = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      nameInputRef.current?.focus();
-      return;
-    }
-    const r = await fetch(apiUrl('/api/classes'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: trimmed,
-        semester,
-        year: year ? Number(year) : undefined,
+    if (!classes) return;
+    let cancelled = false;
+    Promise.all(
+      classes.map(async (c) => {
+        try {
+          const lecs: LectureRow[] = await fetch(
+            apiUrl(`/api/classes/${c.id}/lectures`),
+          ).then((r) => r.json());
+          return [c.id, Array.isArray(lecs) ? lecs : []] as const;
+        } catch {
+          return [c.id, [] as LectureRow[]] as const;
+        }
       }),
+    ).then((pairs) => {
+      if (cancelled) return;
+      const map: Record<string, LectureRow[]> = {};
+      for (const [id, lecs] of pairs) map[id] = lecs;
+      setLecturesByClass(map);
     });
-    if (r.ok) {
-      const cls: { id: string } = await r.json();
-      closeModal();
-      showToast('הקורס נוצר');
-      await loadClasses();
-      setTimeout(() => router.push(`/classes/${cls.id}`), 600);
-    } else {
-      const err = (await r.json().catch(() => ({}))) as { error?: string };
-      showToast(err.error || 'שגיאה', true);
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [classes]);
 
-  const deleteClass = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (!confirm('למחוק את הקורס וכל ההרצאות שלו?')) return;
-    const r = await fetch(apiUrl(`/api/classes/${id}`), { method: 'DELETE' });
-    if (r.ok) {
-      showToast('הקורס נמחק');
-      loadClasses();
-    } else {
-      showToast('שגיאה במחיקה', true);
+  const allLectures = useMemo(
+    () => Object.values(lecturesByClass).flat(),
+    [lecturesByClass],
+  );
+  const summarizedCount = allLectures.filter(
+    (l) => l.status === 'summarized' || l.status === 'done',
+  ).length;
+  const pendingCount = allLectures.filter((l) => l.status === 'pending').length;
+  const attentionCount = allLectures.filter(
+    (l) => l.status === 'error' || l.status === 'failed' || l.status === 'aborted',
+  ).length;
+
+  const partitioned = useMemo(() => {
+    const list = classes ?? [];
+    const active: ClassRow[] = [];
+    const archived: ClassRow[] = [];
+    for (const c of list) {
+      if (isClassArchived(c.id)) archived.push(c);
+      else active.push(c);
     }
-  };
+    const sortFn = (a: ClassRow, b: ClassRow) => {
+      const ya = a.year ?? 0;
+      const yb = b.year ?? 0;
+      if (yb !== ya) return yb - ya;
+      const sa = SEMESTER_ORDER[a.semester ?? ''] ?? 0;
+      const sb = SEMESTER_ORDER[b.semester ?? ''] ?? 0;
+      if (sb !== sa) return sb - sa;
+      return a.name.localeCompare(b.name, 'he');
+    };
+    active.sort(sortFn);
+    archived.sort(sortFn);
+    return { active, archived };
+  }, [classes]);
+
+  const visible =
+    filter === 'all'
+      ? [...partitioned.active, ...partitioned.archived]
+      : filter === 'archive'
+        ? partitioned.archived
+        : partitioned.active;
 
   return (
-    <div className="page-classes">
-      <PageHeader>
-        <div className="logo">🎓</div>
-        <h1>הקורסים שלי</h1>
-        <p>ניהול הרצאות לפי קורס</p>
-      </PageHeader>
+    <div className="page fade-in">
+      <div className="display-h">
+        <div className="display-h__eye">העמוד הראשי</div>
+        <h1 className="display-h__title">הספרייה האקדמית שלי.</h1>
+        <p className="display-h__sub">
+          {(classes?.length ?? 0)} קורסים, {allLectures.length} הרצאות. כל הקלטה
+          מומרת לטקסט, מתוכלת ומסוכמת באופן אוטומטי.
+        </p>
+      </div>
 
-      <main>
-        <div className="card">
-          <div className="card-header">
-            <h2>קורסים</h2>
-            <button className="btn" data-testid="create-class-btn" onClick={() => setModalOpen(true)}>
-              + קורס חדש
-            </button>
+      <div className="glance">
+        <div className="glance__cell">
+          <div className="glance__n">
+            {summarizedCount}
+            <small>/ {allLectures.length}</small>
           </div>
-
-          <div className="classes-grid">
-            {classes === null && <EmptyState message="טוען..." loading />}
-
-            {classes?.length === 0 && (
-              <EmptyState message="אין קורסים עדיין" icon="📚">
-                <button className="btn" onClick={() => setModalOpen(true)}>
-                  + הוסף קורס ראשון
-                </button>
-              </EmptyState>
-            )}
-
-            {classes?.map((c) => {
-              const sem = c.semester ? SEMESTER_HE[c.semester] || c.semester : '';
-              const yr = c.year ? ` ${c.year}` : '';
-              const meta = [sem + yr].filter(Boolean).join(' ');
-              return (
-                <div
-                  key={c.id}
-                  className="class-card"
-                  data-testid="class-card"
-                  onClick={() => router.push(`/classes/${c.id}`)}
-                >
-                  <button
-                    className="class-delete"
-                    data-testid="class-delete-btn"
-                    onClick={(e) => deleteClass(e, c.id)}
-                    title="מחק קורס"
-                  >
-                    ✕
-                  </button>
-                  <h3>{c.name}</h3>
-                  {meta && <div className="class-meta">{meta}</div>}
-                  <span className="class-count">📖 {c.lectureCount} הרצאות</span>
-                </div>
-              );
-            })}
-          </div>
+          <div className="glance__l">הרצאות מסוכמות</div>
         </div>
-      </main>
-
-      <Modal open={modalOpen} onClose={closeModal}>
-        <h3>קורס חדש</h3>
-        <div className="form-group">
-          <label>שם הקורס *</label>
-          <input
-            ref={nameInputRef}
-            type="text"
-            className="form-input"
-            data-testid="class-name-input"
-            placeholder="למשל: סטטיסטיקה 101"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') createClass();
-            }}
-          />
+        <div className="glance__cell">
+          <div className="glance__n">{pendingCount}</div>
+          <div className="glance__l">ממתינות לעיבוד</div>
         </div>
-        <div className="form-group">
-          <label>סמסטר</label>
-          <select
-            className="form-input form-select"
-            value={semester}
-            onChange={(e) => setSemester(e.target.value)}
+        <div className="glance__cell">
+          <div
+            className="glance__n"
+            style={attentionCount > 0 ? { color: 'var(--st-error)' } : undefined}
           >
-            <option value="">— בחר —</option>
-            <option value="spring">אביב</option>
-            <option value="summer">קיץ</option>
-            <option value="fall">סתיו</option>
-            <option value="winter">חורף</option>
-          </select>
+            {attentionCount}
+          </div>
+          <div className="glance__l">דורשות תשומת לב</div>
         </div>
-        <div className="form-group">
-          <label>שנה</label>
-          <input
-            type="number"
-            className="form-input"
-            placeholder="2026"
-            min="2020"
-            max="2040"
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-          />
-        </div>
-        <div className="modal-actions">
-          <button className="btn btn-outline" onClick={closeModal}>
-            ביטול
-          </button>
-          <button className="btn" data-testid="class-submit-btn" onClick={createClass}>
-            צור קורס
-          </button>
-        </div>
-      </Modal>
+      </div>
 
-      {toastEl}
+      <div className="semester-strip">
+        <button
+          className={filter === 'all' ? 'is-active' : ''}
+          onClick={() => setFilter('all')}
+        >
+          הכל{' '}
+          <span className="semester-strip__count">{classes?.length ?? 0}</span>
+        </button>
+        <button
+          className={filter === 'active' ? 'is-active' : ''}
+          onClick={() => setFilter('active')}
+        >
+          פעילים{' '}
+          <span className="semester-strip__count">{partitioned.active.length}</span>
+        </button>
+        <button
+          className={filter === 'archive' ? 'is-active' : ''}
+          onClick={() => setFilter('archive')}
+        >
+          ארכיון{' '}
+          <span className="semester-strip__count">{partitioned.archived.length}</span>
+        </button>
+      </div>
+
+      {classes !== null && classes.length === 0 ? (
+        <div className="class-grid">
+          <div className="class-new" onClick={() => setModalOpen(true)}>
+            <div className="class-new__plus">+</div>
+            עדיין אין קורסים — הוסף קורס חדש
+          </div>
+        </div>
+      ) : (
+        <div className="class-grid">
+          {visible.map((c) => {
+            const sem = c.semester ? SEMESTER_HE[c.semester] || c.semester : '';
+            const yr = c.year ? ` ${c.year}` : '';
+            const meta = [sem + yr].filter(Boolean).join(' ');
+            const lecs = lecturesByClass[c.id] ?? [];
+            const done = lecs.filter(
+              (l) => l.status === 'summarized' || l.status === 'done',
+            ).length;
+            return (
+              <article
+                key={c.id}
+                className="class-card"
+                data-color={getClassColor(c.id)}
+                onClick={() => router.push(`/classes/${c.id}`)}
+              >
+                <div className="class-card__bar" />
+                <div className="class-card__top">
+                  <div className="class-card__icon">{classIcon(c.name)}</div>
+                  <div className="class-card__code">—</div>
+                </div>
+                <h3 className="class-card__title">{c.name}</h3>
+                {meta && <div className="class-card__meta">{meta}</div>}
+                <div className="class-card__stats">
+                  <div className="class-card__stat">
+                    <div className="class-card__stat-n">
+                      {done}/{c.lectureCount}
+                    </div>
+                    <div className="class-card__stat-l">מסוכם</div>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+
+          <div className="class-new" onClick={() => setModalOpen(true)}>
+            <div className="class-new__plus">+</div>
+            קורס חדש
+          </div>
+        </div>
+      )}
+
+      <NewCourseModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={(id) => {
+          setModalOpen(false);
+          loadClasses();
+          setTimeout(() => router.push(`/classes/${id}`), 400);
+        }}
+      />
     </div>
   );
 }
