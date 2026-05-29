@@ -7,7 +7,23 @@
     "build": "nest build",
     "start:prod": "node dist/src/main.js",
     "install:whisper-cpp": "npx nodejs-whisper download",
-    "install:playwright": "npx playwright install chromium"
+    "install:playwright": "npx playwright install chromium",
+    "test": "NODE_ENV=test jest --runInBand",
+    "test:watch": "NODE_ENV=test jest --runInBand --watch",
+    "test:coverage": "NODE_ENV=test jest --runInBand --coverage"
+  },
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": ".",
+    "testMatch": ["<rootDir>/test/**/*.spec.ts"],
+    "transform": {
+      "^.+\\.ts$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.spec.json" }]
+    },
+    "testEnvironment": "node",
+    "verbose": true,
+    "moduleNameMapper": {
+      "^marked$": "<rootDir>/test/__mocks__/marked.ts"
+    }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
@@ -31,10 +47,16 @@
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
+    "@nestjs/testing": "^10.4.22",
     "@types/better-sqlite3": "^7.6.0",
     "@types/express": "^4.17.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
     "@types/nodemailer": "^6.0.0",
+    "@types/supertest": "^7.2.0",
+    "jest": "^30.4.2",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.0.0",
     "typescript": "^5.0.0"
   }

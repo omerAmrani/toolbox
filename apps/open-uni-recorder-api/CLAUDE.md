@@ -29,3 +29,9 @@ SQLite DB + filesystem mirror. Every write goes to both:
 For non-trivial changes, check `docs/` for relevant context first:
 - `docs/pipeline.md` — full pipeline flow, cron, queue runner
 - `docs/lectures.md` — transcribe/summarize SSE endpoints, Q&A flow, lecture statuses
+
+## Tests
+
+Integration tests live in `test/`. Run with `pnpm test` (uses `NODE_ENV=test`, `--runInBand`).
+
+When adding or changing a feature, update the relevant test file in `test/` alongside the doc in `docs/`. Both must stay in sync with the code.

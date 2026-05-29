@@ -16,6 +16,10 @@ Sends Gmail notifications when new lectures are detected or when a summary is re
 
 **Manual test:** `POST /api/classes/test-email` with `{ classId, lectureId }` — requires lecture to have a current summary.
 
+## Tests
+
+Dispatch is covered with `EmailService` mocked — assertions only, never hits SMTP. `sendLectureSummary` is asserted on queue completion and `sendDetectionNotification` when detection finds new lectures (and not when it finds none). Both are fire-and-forget, so a rejected promise must not fail the pipeline run. See [pipeline.md](pipeline.md#tests) and `open-uni-deployment.md` Phase 1.
+
 ## Web
 
 - Settings page — "בדיקת שליחת מייל" section: pick any lecture with a summary and send a test email

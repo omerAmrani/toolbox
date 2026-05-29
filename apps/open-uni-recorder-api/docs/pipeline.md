@@ -35,6 +35,16 @@ Routes:
 
 **Backends** from config: `WHISPER_BACKEND` (`groq-whisper` | `whisper-cpp`), `SUMMARIZE_BACKEND` (`gemini` | `claude`).
 
+## Tests
+
+Covers processes with no HTTP endpoint (run on a schedule or on boot):
+
+- **Startup recovery** (`resetStuckProcessing()`, runs in `AppModule` on boot) — integration test against the real DB: a lecture in `processing` is reset to `failed` with `lastError = 'Server restarted mid-job'`; lectures in other states are left untouched.
+- **Email dispatch** — asserted with `EmailService` mocked (never hits SMTP): `sendLectureSummary` is called once on successful `runQueue` completion; `sendDetectionNotification` is called once when `runFullPipeline` detects new lectures and not at all when none are found. A rejected email promise must not fail the run (fire-and-forget).
+- **Cron scheduler** (`JobsService` `@Cron('0 10 * * 4,5')` + 30-min retry loop) — **intentionally not tested.** Treated as infra; its core work (`runFullPipeline`) is covered via the `run-pipeline` endpoint. Known coverage gap.
+
+See `open-uni-deployment.md` Phase 1 for the full test plan.
+
 ## Web
 
 - Page: Settings (`/settings`) — queue panel, cron trigger, sync panel
