@@ -24,6 +24,13 @@ interface LectureMeta {
   currentSummary?: string | null;
 }
 
+interface LectureListItem {
+  id: string;
+  name: string;
+  lectureDate?: string | null;
+  addedAt: string;
+}
+
 interface SummaryVersion {
   id: string;
   date: string;
@@ -47,6 +54,7 @@ export default function LecturePage() {
 
   const [lecture, setLecture] = useState<LectureMeta | null>(null);
   const [className, setClassName] = useState<string>('');
+  const [lectures, setLectures] = useState<LectureListItem[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [summary, setSummary] = useState('');
   const [streaming, setStreaming] = useState(false);
@@ -94,6 +102,15 @@ export default function LecturePage() {
     }
   }, [classId]);
 
+  const loadLectures = useCallback(async () => {
+    try {
+      const data: LectureListItem[] = await fetch(apiUrl(`/api/classes/${classId}/lectures`)).then((r) => r.json());
+      if (Array.isArray(data)) setLectures(data);
+    } catch {
+      /* ignore */
+    }
+  }, [classId]);
+
   const loadSummary = useCallback(async () => {
     try {
       const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summary`));
@@ -118,7 +135,8 @@ export default function LecturePage() {
   useEffect(() => {
     loadLecture();
     loadClassName();
-  }, [loadLecture, loadClassName]);
+    loadLectures();
+  }, [loadLecture, loadClassName, loadLectures]);
 
   useEffect(() => {
     if (!lecture) return;
@@ -147,6 +165,15 @@ export default function LecturePage() {
     const words = summary.trim().split(/\s+/).length;
     return Math.max(1, Math.round(words / 200));
   }, [summary]);
+
+  const { prevLecture, nextLecture } = useMemo(() => {
+    const idx = lectures.findIndex((l) => l.id === lectureId);
+    if (idx === -1) return { prevLecture: null, nextLecture: null };
+    return {
+      prevLecture: idx > 0 ? lectures[idx - 1] : null,
+      nextLecture: idx < lectures.length - 1 ? lectures[idx + 1] : null,
+    };
+  }, [lectures, lectureId]);
 
   const toggleTranscript = async () => {
     const next = !transcriptOpen;
@@ -457,6 +484,24 @@ export default function LecturePage() {
           </div>
         </div>
         <div className="lec-h__actions">
+          {prevLecture && (
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => router.push(`/classes/${classId}/lectures/${prevLecture.id}`)}
+              title={prevLecture.name}
+            >
+              ← הקודמת
+            </button>
+          )}
+          {nextLecture && (
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => router.push(`/classes/${classId}/lectures/${nextLecture.id}`)}
+              title={nextLecture.name}
+            >
+              הבאה →
+            </button>
+          )}
           <button className="btn btn--ghost btn--sm" onClick={toggleTranscript}>
             📜 תמלול
           </button>

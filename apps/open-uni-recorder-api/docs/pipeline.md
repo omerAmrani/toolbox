@@ -18,9 +18,10 @@ Routes:
 **`runQueue()` flow:**
 1. Pick next `pending` lecture → set `processing`
 2. `DownloadService.downloadAndTranscribe()` → saves `transcript.txt`
-3. `SummarizeService.mergeSummaries()` → saves summary version, sets current
-4. Set status `done`, send summary email
-5. On abort: status → `aborted`. On error: status → `failed`.
+3. Guard: transcript must be non-empty, otherwise throws → status `failed`
+4. `SummarizeService.mergeSummaries()` → saves summary version, sets current
+5. Set status `done`, send summary email
+6. On abort: status → `aborted`. On error: status → `failed`.
 
 **`runFullPipeline()` flow:**
 1. For each class with `opalCourseUrl`: run `DetectService.detectNewLectures()` (Playwright, OPAL login)

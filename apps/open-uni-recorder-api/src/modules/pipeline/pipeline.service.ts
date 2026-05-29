@@ -113,6 +113,7 @@ export class PipelineService {
           }
 
           const transcript = readFileSync(transcriptPath, 'utf8');
+          if (!transcript.trim()) throw new Error('תמלול ריק — לא ניתן לסכם');
           const { mergeSummaries } = await this.summarize.getSummarizer();
           const summary = await mergeSummaries([transcript], onProgress, () => {});
           this.storage.saveSummaryVersion(classId, lectureId, summary, SUMMARIZE_BACKEND!);

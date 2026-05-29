@@ -4,7 +4,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "dev:open-uni": "trap 'kill 0' EXIT TERM INT; turbo run dev --filter=@toolbox/open-uni-recorder-api --filter=@toolbox/open-uni-recorder-web --parallel",
+    "predev:open-uni": "lsof -ti:3001,3002 | xargs kill -9 2>/dev/null; true",
+    "dev:open-uni": "turbo run dev --filter=@toolbox/open-uni-recorder-api --filter=@toolbox/open-uni-recorder-web --parallel",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"

@@ -8,8 +8,13 @@
 **Layout:**
 - Split view: main column (summary + tabs) + sidebar (metadata + actions)
 - Reading progress bar sticky above the summary card (scroll-tracked)
-- Header: back link, lecture name, date, status pill, reading-time estimate (~200 wpm)
+- Header: back link, lecture name, date, status pill, reading-time estimate (~200 wpm), prev/next lecture navigation buttons
 - Sidebar actions: re-transcribe (full + 30-min test), re-summarize, export, versions
+
+**Lecture navigation:**
+- Prev/Next buttons in the header action bar navigate between lectures in chronological order (`COALESCE(lectureDate, addedAt) ASC`)
+- Buttons are conditionally rendered — hidden when already at the first or last lecture
+- Lecture list fetched from `GET /api/classes/:classId/lectures` on page load
 
 **Summary tab:**
 - Summary rendered as markdown (via `marked`) inside `.summary` wrapper
