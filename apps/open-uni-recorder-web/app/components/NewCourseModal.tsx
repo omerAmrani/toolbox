@@ -36,8 +36,8 @@ export default function NewCourseModal({ open, onClose, onCreated }: Props) {
 
   const submit = async () => {
     setError(null);
-    if (!name.trim() || !url.trim()) {
-      setError('שם הקורס וקישור הדף נדרשים');
+    if (!name.trim()) {
+      setError('שם הקורס נדרש');
       return;
     }
     setSubmitting(true);
@@ -80,6 +80,7 @@ export default function NewCourseModal({ open, onClose, onCreated }: Props) {
           <input
             ref={nameRef}
             type="text"
+            data-testid="class-name-input"
             placeholder="למשל: חשבון אינפיניטסימלי 1"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -133,7 +134,7 @@ export default function NewCourseModal({ open, onClose, onCreated }: Props) {
           <button className="btn btn--ghost btn--sm" onClick={onClose} disabled={submitting}>
             ביטול
           </button>
-          <button className="btn" onClick={submit} disabled={submitting}>
+          <button className="btn" data-testid="class-submit-btn" onClick={submit} disabled={submitting}>
             {submitting ? '...' : 'צור קורס'}
           </button>
         </div>

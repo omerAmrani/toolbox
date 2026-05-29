@@ -47,6 +47,10 @@ export default function ClassDetailPage() {
   const [archivedRefresh, setArchivedRefresh] = useState(0);
   const [classArchivedState, setClassArchivedState] = useState(false);
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
+  const [addLectureOpen, setAddLectureOpen] = useState(false);
+  const [newLectureName, setNewLectureName] = useState('');
+  const [newLectureUrl, setNewLectureUrl] = useState('');
+  const [addLectureSubmitting, setAddLectureSubmitting] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadClass = useCallback(async () => {
@@ -162,6 +166,58 @@ export default function ClassDetailPage() {
     }
   };
 
+  const addLecture = async () => {
+    if (!newLectureName.trim()) return;
+    setAddLectureSubmitting(true);
+    try {
+      await fetch(apiUrl(`/api/classes/${classId}/lectures`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newLectureName.trim(), url: newLectureUrl.trim() }),
+      });
+      setAddLectureOpen(false);
+      setNewLectureName('');
+      setNewLectureUrl('');
+      loadLectures();
+    } finally {
+      setAddLectureSubmitting(false);
+    }
+  };
+
+  const runPipeline = async (lectureId: string) => {
+    setRunningIds((s) => new Set(s).add(lectureId));
+    try {
+      await streamSSE(
+        `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
+        {},
+        (ev) => {
+          if (ev.type === 'aborted') throw new Error('aborted');
+          if (ev.type === 'error') throw new Error(String(ev.message));
+        },
+      );
+      await streamSSE(
+        `/api/classes/${classId}/lectures/${lectureId}/summarize`,
+        {},
+        (ev) => {
+          if (ev.type === 'aborted') throw new Error('aborted');
+          if (ev.type === 'error') throw new Error(String(ev.message));
+        },
+      );
+      showToast('הסיכום הושלם!');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'שגיאה';
+      if (msg === 'aborted') showToast('הפעולה בוטלה');
+      else showToast(msg, true);
+    } finally {
+      setRunningIds((s) => {
+        const next = new Set(s);
+        next.delete(lectureId);
+        return next;
+      });
+      loadLectures();
+    }
+  };
+
   const runSummarize = async (lectureId: string) => {
     setRunningIds((s) => new Set(s).add(lectureId));
     try {
@@ -250,6 +306,14 @@ export default function ClassDetailPage() {
 
   return (
     <div className="page fade-in">
+      <button
+        className="btn btn--ghost btn--sm"
+        style={{ marginBottom: 'var(--gap-lg)' }}
+        onClick={() => router.push('/classes')}
+      >
+        ← חזרה לקורסים
+      </button>
+
       <div className="detail-h" data-color={color}>
         <div className="detail-h__mark">{classIcon(cls.name)}</div>
         <div className="detail-h__body">
@@ -336,6 +400,50 @@ export default function ClassDetailPage() {
         )}
       </div>
 
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--gap-sm)' }}>
+        <button
+          className="btn btn--sm"
+          data-testid="add-lecture-btn"
+          onClick={() => setAddLectureOpen(true)}
+        >
+          + הוסף הרצאה
+        </button>
+      </div>
+
+      {addLectureOpen && (
+        <div className="modal-bg" onClick={(e) => { if (e.target === e.currentTarget) setAddLectureOpen(false); }}>
+          <div className="modal">
+            <h2 className="modal__title">הוספת הרצאה</h2>
+            <div className="modal__field">
+              <label>שם ההרצאה</label>
+              <input
+                type="text"
+                data-testid="lecture-name-input"
+                value={newLectureName}
+                onChange={(e) => setNewLectureName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="modal__field">
+              <label>קישור</label>
+              <input
+                type="url"
+                dir="ltr"
+                data-testid="lecture-url-input"
+                value={newLectureUrl}
+                onChange={(e) => setNewLectureUrl(e.target.value)}
+              />
+            </div>
+            <div className="modal__actions">
+              <button className="btn btn--ghost btn--sm" onClick={() => setAddLectureOpen(false)} disabled={addLectureSubmitting}>ביטול</button>
+              <button className="btn" data-testid="add-lecture-submit" onClick={addLecture} disabled={addLectureSubmitting}>
+                {addLectureSubmitting ? '...' : 'הוסף'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {lectures === null ? (
         <div style={{ color: 'var(--muted)' }}>טוען...</div>
       ) : orderedLectures.length === 0 ? (
@@ -352,6 +460,7 @@ export default function ClassDetailPage() {
               <div
                 key={l.id}
                 className="tl-item"
+                data-testid="lecture-row"
                 data-status={l.status}
                 data-current={current ? '' : undefined}
               >
@@ -359,19 +468,34 @@ export default function ClassDetailPage() {
                 <article
                   className="lec-card"
                   data-current={current ? '' : undefined}
-                  onClick={() => router.push(`/classes/${classId}/lectures/${l.id}`)}
-                  style={{ cursor: 'pointer' }}
                 >
                   <div className="lec-card__num">{String(l.n).padStart(2, '0')}</div>
                   <div>
-                    <div className="lec-card__title">{l.name}</div>
+                    <a
+                      className="lecture-link"
+                      href={`/classes/${classId}/lectures/${l.id}`}
+                      onClick={(e) => { e.preventDefault(); router.push(`/classes/${classId}/lectures/${l.id}`); }}
+                      style={{ color: 'inherit', textDecoration: 'none' }}
+                    >
+                      <div className="lec-card__title">{l.name}</div>
+                    </a>
                     <div className="lec-card__meta">
                       <span>{fmtDateLong(l.lectureDate)}</span>
                       <span style={{ opacity: 0.4 }}>·</span>
                       <Status s={l.status} />
                     </div>
                   </div>
-                  <div className="lec-card__actions" onClick={(e) => e.stopPropagation()}>
+                  <div className="lec-card__actions">
+                    {l.status === 'pending' && (
+                      <button
+                        className="btn btn--sm"
+                        data-testid="run-pipeline-btn"
+                        onClick={() => runPipeline(l.id)}
+                        title="הפעל pipeline"
+                      >
+                        ▶ הפעל
+                      </button>
+                    )}
                     {l.status === 'transcribed' && (
                       <button
                         className="btn btn--sm"
@@ -390,13 +514,13 @@ export default function ClassDetailPage() {
                         ↻ נסה שנית
                       </button>
                     )}
-                    {(l.status === 'pending' || l.status === 'skipped') && (
+                    {l.status === 'skipped' && (
                       <button
                         className="btn btn--ghost btn--sm"
                         onClick={() => skipLecture(l.id, l.status)}
-                        title={l.status === 'skipped' ? 'בטל דילוג' : 'דלג'}
+                        title="בטל דילוג"
                       >
-                        {l.status === 'skipped' ? '↺ בטל דילוג' : '⤳ דלג'}
+                        ↺ בטל דילוג
                       </button>
                     )}
                     <button
@@ -408,6 +532,7 @@ export default function ClassDetailPage() {
                     </button>
                     <button
                       className="btn btn--ghost btn--sm"
+                      data-testid="delete-lecture-btn"
                       onClick={() => deleteLecture(l.id)}
                       title="מחק"
                     >

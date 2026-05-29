@@ -38,6 +38,12 @@ export default function ClassesPage() {
     }
   };
 
+  const deleteClass = async (id: string) => {
+    if (!confirm('למחוק את הקורס וכל ההרצאות שלו?')) return;
+    await fetch(apiUrl(`/api/classes/${id}`), { method: 'DELETE' });
+    loadClasses();
+  };
+
   useEffect(() => {
     loadClasses();
   }, []);
@@ -168,9 +174,9 @@ export default function ClassesPage() {
 
       {classes !== null && classes.length === 0 ? (
         <div className="class-grid">
-          <div className="class-new" onClick={() => setModalOpen(true)}>
+          <div className="class-new" data-testid="create-class-btn" onClick={() => setModalOpen(true)}>
             <div className="class-new__plus">+</div>
-            עדיין אין קורסים — הוסף קורס חדש
+            <span>אין קורסים עדיין</span>
           </div>
         </div>
       ) : (
@@ -187,13 +193,22 @@ export default function ClassesPage() {
               <article
                 key={c.id}
                 className="class-card"
+                data-testid="class-card"
                 data-color={getClassColor(c.id)}
                 onClick={() => router.push(`/classes/${c.id}`)}
               >
                 <div className="class-card__bar" />
                 <div className="class-card__top">
                   <div className="class-card__icon">{classIcon(c.name)}</div>
-                  <div className="class-card__code">—</div>
+                  <button
+                    className="btn btn--ghost btn--sm"
+                    data-testid="class-delete-btn"
+                    onClick={(e) => { e.stopPropagation(); deleteClass(c.id); }}
+                    title="מחק קורס"
+                    style={{ marginInlineStart: 'auto' }}
+                  >
+                    🗑
+                  </button>
                 </div>
                 <h3 className="class-card__title">{c.name}</h3>
                 {meta && <div className="class-card__meta">{meta}</div>}
@@ -209,7 +224,7 @@ export default function ClassesPage() {
             );
           })}
 
-          <div className="class-new" onClick={() => setModalOpen(true)}>
+          <div className="class-new" data-testid="create-class-btn" onClick={() => setModalOpen(true)}>
             <div className="class-new__plus">+</div>
             קורס חדש
           </div>
