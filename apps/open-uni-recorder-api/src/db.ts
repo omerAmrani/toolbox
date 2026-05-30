@@ -3,7 +3,7 @@ import path from 'path';
 import { mkdirSync } from 'fs';
 import { getSettings } from '../settings';
 
-const DEFAULT_DATA_DIR = path.resolve(__dirname, '..', '..', 'recorder-db');
+const DEFAULT_DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, '..', '..', 'recorder-db');
 const TEST_DATA_DIR = path.resolve(__dirname, '..', '..', 'temp-db');
 export const DATA_DIR: string =
   process.env.NODE_ENV === 'test' ? TEST_DATA_DIR : (getSettings().dataDir || DEFAULT_DATA_DIR);

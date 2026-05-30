@@ -1,0 +1,21 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @toolbox/open-uni-recorder-api build"
+
+[deploy]
+startCommand = "node apps/open-uni-recorder-api/dist/src/main.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+
+# Required env vars (set in Railway dashboard):
+#   DATA_DIR=/app/recorder-db        ← mount Railway volume here
+#   NODE_ENV=production
+#   OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID
+#   GROQ_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
+#   GMAIL_USER, GMAIL_APP_PASSWORD, NOTIFY_EMAIL
+#   WEB_ORIGIN=https://<your-vercel-url>
+#
+# Note: Playwright (used for video URL extraction) needs Chromium system deps.
+# If Railway build fails on playwright install, switch to a Dockerfile based on
+# mcr.microsoft.com/playwright/node:20 — see open-uni-deployment.md.

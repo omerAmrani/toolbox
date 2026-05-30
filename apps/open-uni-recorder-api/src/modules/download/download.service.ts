@@ -173,9 +173,10 @@ export class DownloadService {
     const pending: { idx: number; p: string; resolve: (v: { chunkText: string }) => void }[] = [];
     let active = 0;
     let totalSeen = 0;
+    let firstError: Error | null = null;
 
     const drain = () => {
-      while (active < CONCURRENCY && pending.length) {
+      while (active < CONCURRENCY && pending.length && !firstError) {
         active++;
         const { idx, p, resolve } = pending.shift()!;
         console.log(`\n🎙️  Transcribing segment ${idx + 1} (active=${active}, pending=${pending.length})...`);
@@ -187,6 +188,7 @@ export class DownloadService {
           resolve({ chunkText: chunkText || result.text });
         }).catch((err: any) => {
           console.error(`  [transcribe error] segment ${idx + 1}: ${err.message}`);
+          if (!firstError) firstError = err;
           active--;
           drain();
           resolve({ chunkText: '' });
@@ -210,6 +212,7 @@ export class DownloadService {
             if (active === 0 && pending.length === 0) { clearInterval(check); resolve(); }
           }, 500);
         });
+        if (firstError) throw firstError;
         results.sort((a, b) => a.idx - b.idx);
         return results.map(r => r.chunkText || r.text).join('\n');
       },

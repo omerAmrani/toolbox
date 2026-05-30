@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import path from 'path';
 import { StorageService } from '../storage/storage.service';
 import { DetectService } from '../detect/detect.service';
@@ -108,7 +108,9 @@ export class PipelineService {
           if (!existsSync(transcriptPath)) {
             const videoUrl = await this.download.extractVideoUrl(lecture.url, onProgress, controller.signal);
             const transcript = await this.download.downloadAndTranscribe(videoUrl, onProgress, null, mp3Path, null, controller.signal);
+            if (!transcript.trim()) throw new Error('תמלול ריק — לא ניתן לסכם');
             writeFileSync(transcriptPath, transcript);
+            if (existsSync(mp3Path)) rmSync(mp3Path);
             this.storage.updateLectureMeta(classId, lectureId, { whisperModel: WHISPER_MODEL, whisperBackend: WHISPER_BACKEND });
           }
 

@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import path from 'path';
 import { PipelineService } from '../src/modules/pipeline/pipeline.service';
 import { StorageService } from '../src/modules/storage/storage.service';
 import { DetectService } from '../src/modules/detect/detect.service';
@@ -149,6 +151,32 @@ describe('PipelineService (direct)', () => {
       mockEmail.sendLectureSummary.mockRejectedValueOnce(new Error('SMTP error'));
 
       await expect(service.runQueue()).resolves.toBeUndefined();
+    });
+
+    it('deletes mp3 after successful transcription', async () => {
+      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
+      const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
+      const mp3Path = path.join(storage.lectureDirPath(cls.id, lec.id), 'audio.mp3');
+      mkdirSync(path.dirname(mp3Path), { recursive: true });
+      writeFileSync(mp3Path, 'fake audio');
+
+      await service.runQueue();
+
+      expect(existsSync(mp3Path)).toBe(false);
+    });
+
+    it('does not delete mp3 when transcript is empty (lecture fails, mp3 survives for retry)', async () => {
+      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
+      const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
+      const mp3Path = path.join(storage.lectureDirPath(cls.id, lec.id), 'audio.mp3');
+      mkdirSync(path.dirname(mp3Path), { recursive: true });
+      writeFileSync(mp3Path, 'fake audio');
+      mockDownload.downloadAndTranscribe.mockResolvedValueOnce('   ');
+
+      await service.runQueue();
+
+      expect(storage.getLecture(cls.id, lec.id).status).toBe('failed');
+      expect(existsSync(mp3Path)).toBe(true);
     });
 
     it('skips non-pending lectures', async () => {
