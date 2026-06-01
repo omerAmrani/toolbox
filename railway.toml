@@ -1,5 +1,4 @@
 [build]
-builder = "nixpacks"
 buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @toolbox/open-uni-recorder-api build"
 
 [deploy]
