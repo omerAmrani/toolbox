@@ -36,7 +36,7 @@ Routes:
 
 **Concurrency:** only one queue runs at a time (`queueRunning` flag). Abort is per-lecture via `AbortController` map.
 
-**Backends** from config: `WHISPER_BACKEND` (`groq-whisper` | `whisper-cpp`), `SUMMARIZE_BACKEND` (`gemini` | `claude`).
+**Backends** from config: transcription via Groq Whisper API, `SUMMARIZE_BACKEND` (`gemini` | `claude`).
 
 ## Tests
 

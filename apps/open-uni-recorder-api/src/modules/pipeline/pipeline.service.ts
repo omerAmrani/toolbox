@@ -6,7 +6,7 @@ import { DetectService } from '../detect/detect.service';
 import { DownloadService } from '../download/download.service';
 import { SummarizeService } from '../summarize/summarize.service';
 import { EmailService } from '../email/email.service';
-import { WHISPER_MODEL, WHISPER_BACKEND, SUMMARIZE_BACKEND } from '../../config';
+import { SUMMARIZE_BACKEND } from '../../config';
 
 const DATA_DIR = path.resolve(__dirname, '..', '..', '..', 'data');
 const CRON_LOG_PATH = path.join(DATA_DIR, 'cron-log.json');
@@ -111,7 +111,7 @@ export class PipelineService {
             if (!transcript.trim()) throw new Error('תמלול ריק — לא ניתן לסכם');
             writeFileSync(transcriptPath, transcript);
             if (existsSync(mp3Path)) rmSync(mp3Path);
-            this.storage.updateLectureMeta(classId, lectureId, { whisperModel: WHISPER_MODEL, whisperBackend: WHISPER_BACKEND });
+            this.storage.updateLectureMeta(classId, lectureId, { whisperBackend: 'groq-whisper' });
           }
 
           const transcript = readFileSync(transcriptPath, 'utf8');

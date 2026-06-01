@@ -8,7 +8,7 @@ import { StorageService } from '../storage/storage.service';
 import { DownloadService } from '../download/download.service';
 import { SummarizeService } from '../summarize/summarize.service';
 import { QaService } from '../qa/qa.service';
-import { WHISPER_BACKEND, WHISPER_MODEL, SUMMARIZE_BACKEND, GEMINI_MODEL, CLAUDE_MODEL } from '../../config';
+import { SUMMARIZE_BACKEND, GEMINI_MODEL, CLAUDE_MODEL } from '../../config';
 
 @Controller('api/classes')
 export class LecturesController {
@@ -219,8 +219,7 @@ export class LecturesController {
 
       this.storage.updateLectureMeta(classId, lectureId, {
         status: 'transcribed',
-        whisperModel: WHISPER_MODEL,
-        whisperBackend: WHISPER_BACKEND,
+        whisperBackend: 'groq-whisper',
       });
 
       broadcast({ type: 'done', status: 'transcribed' });

@@ -11,8 +11,6 @@ export const {
   GROQ_API_KEY,
   GEMINI_API_KEY,
   ANTHROPIC_API_KEY,
-  WHISPER_MODEL = 'small',
-  WHISPER_BACKEND = 'groq-whisper',
   WHISPER_PROMPT = 'הרצאה אקדמית. עשוי להכיל מונחים טכניים באנגלית.',
   WHISPER_CONCURRENCY = '2',
   SUMMARIZE_BACKEND = 'gemini',

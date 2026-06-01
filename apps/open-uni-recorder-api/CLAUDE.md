@@ -12,7 +12,7 @@ App logic → utils: allowed. Utils → app logic: never.
 
 ## Config
 
-Single entrypoint: `src/config.ts` — dotenv + exports. Import from there, not from `process.env` directly. Key vars: `WHISPER_BACKEND`, `SUMMARIZE_BACKEND`, `OUTPUT_LANG`, `OPENU_USERNAME/PASSWORD/ID`, `GMAIL_*`.
+Single entrypoint: `src/config.ts` — dotenv + exports. Import from there, not from `process.env` directly. Key vars: `SUMMARIZE_BACKEND`, `OUTPUT_LANG`, `OPENU_USERNAME/PASSWORD/ID`, `GMAIL_*`.
 
 ## Data storage
 

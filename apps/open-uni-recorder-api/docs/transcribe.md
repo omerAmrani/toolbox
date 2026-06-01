@@ -14,11 +14,7 @@ Downloads a lecture video from OPAL and transcribes it to text using Whisper.
 4. Sets lecture status: `transcribing` → `transcribed`
 5. If `DELETE_MP3_AFTER_TRANSCRIBE=true`, deletes `audio.mp3` after saving transcript
 
-**Backends** (set via `WHISPER_BACKEND`):
-- `groq-whisper` — Groq Whisper API (requires `GROQ_API_KEY`)
-- `whisper-cpp` — local whisper.cpp binary
-
-**Config:** `WHISPER_MODEL` is stored on the lecture record after transcription.
+**Backend:** Groq Whisper API (`whisper-large-v3-turbo`, requires `GROQ_API_KEY`). Retries up to 5× on rate limits with exponential backoff.
 
 **Gotcha:** transcript path must exist and be non-empty before summarization is allowed.
 

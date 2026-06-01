@@ -6,7 +6,6 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start:prod": "node dist/src/main.js",
-    "install:whisper-cpp": "npx nodejs-whisper download",
     "install:playwright": "npx playwright install chromium",
     "test": "NODE_ENV=test jest --runInBand",
     "test:watch": "NODE_ENV=test jest --runInBand --watch",
@@ -37,9 +36,7 @@
     "express": "^4.19.2",
     "groq-sdk": "^1.1.2",
     "marked": "^18.0.4",
-    "nodejs-whisper": "latest",
     "nodemailer": "^8.0.7",
-    "openai-whisper-js": "latest",
     "playwright": "^1.59.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1"
