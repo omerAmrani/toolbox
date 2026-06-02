@@ -42,6 +42,35 @@ describe('HealthController', () => {
     jest.clearAllMocks();
   });
 
+  describe('GET /api/health/features', () => {
+    it('returns an entry for every known feature', async () => {
+      const res = await request(app.getHttpServer()).get('/api/health/features');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      const features = res.body.map((f: any) => f.feature);
+      expect(features).toContain('transcription');
+      expect(features).toContain('summarization');
+      expect(features).toContain('lecture-download');
+      expect(features).toContain('email-notifications');
+    });
+
+    it('returns only feature and available fields — no env var names', async () => {
+      const res = await request(app.getHttpServer()).get('/api/health/features');
+      for (const entry of res.body) {
+        expect(Object.keys(entry).sort()).toEqual(['available', 'feature']);
+      }
+    });
+
+    it('reports features with keys set as available, and email-notifications as unavailable (not in env.test)', async () => {
+      const res = await request(app.getHttpServer()).get('/api/health/features');
+      const byName = Object.fromEntries(res.body.map((f: any) => [f.feature, f.available]));
+      expect(byName['transcription']).toBe(true);
+      expect(byName['summarization']).toBe(true);
+      expect(byName['lecture-download']).toBe(true);
+      expect(byName['email-notifications']).toBe(false);
+    });
+  });
+
   describe('GET /api/health/gemini', () => {
     it('returns ok:true with latency when API responds', async () => {
       mockGenerate.mockResolvedValue({ response: { text: () => 'ok' } });
