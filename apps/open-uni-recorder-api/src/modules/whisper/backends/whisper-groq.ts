@@ -2,7 +2,10 @@ import Groq from 'groq-sdk';
 import fs from 'fs';
 import { GROQ_API_KEY, WHISPER_PROMPT } from '../../../config';
 
-const groq = new Groq({ apiKey: GROQ_API_KEY });
+function getClient(): Groq {
+  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not set in .env');
+  return new Groq({ apiKey: GROQ_API_KEY });
+}
 
 async function waitMs(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -12,7 +15,7 @@ export async function transcribe(audioPath: string, retries = 5): Promise<{ text
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const fileStream = fs.createReadStream(audioPath);
-      const transcription = await groq.audio.transcriptions.create({
+      const transcription = await getClient().audio.transcriptions.create({
         file: fileStream,
         model: 'whisper-large-v3-turbo',
         language: 'he',
