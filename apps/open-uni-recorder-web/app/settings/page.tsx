@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { Status, fmtDate } from '@/app/components/Status';
+import FeatureHealthBanner from '@/app/components/FeatureHealthBanner';
 import { STATUS_LABEL, STATUS_COLOR } from '@/lib/status';
 
 interface DataDirInfo {
@@ -392,6 +393,8 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      <FeatureHealthBanner />
 
       <div className="settings-grid">
         {/* Detect-new sync card */}

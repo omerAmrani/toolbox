@@ -1,8 +1,12 @@
-import { Controller, Get, Res } from '@nestjs/common';
+import { Controller, Get, Logger, OnModuleInit, Res } from '@nestjs/common';
 import { Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL, CLAUDE_MODEL, GEMINI_API_KEY, ANTHROPIC_API_KEY } from '../../config';
+import {
+  GEMINI_MODEL, CLAUDE_MODEL, GEMINI_API_KEY, ANTHROPIC_API_KEY,
+  GROQ_API_KEY, OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID,
+  GMAIL_USER, GMAIL_APP_PASSWORD, NOTIFY_EMAIL, SUMMARIZE_BACKEND,
+} from '../../config';
 
 interface HealthCheckResult {
   ok: boolean;
@@ -13,8 +17,38 @@ interface HealthCheckResult {
   model?: string;
 }
 
+interface FeatureStatus {
+  feature: string;
+  available: boolean;
+}
+
 @Controller('api/health')
-export class HealthController {
+export class HealthController implements OnModuleInit {
+  private readonly logger = new Logger(HealthController.name);
+  private buildFeatureMap(): FeatureStatus[] {
+    const summaryAvailable = SUMMARIZE_BACKEND === 'claude' ? !!ANTHROPIC_API_KEY : !!GEMINI_API_KEY;
+    return [
+      { feature: 'transcription',       available: !!GROQ_API_KEY },
+      { feature: 'summarization',        available: summaryAvailable },
+      { feature: 'lecture-download',     available: !!(OPENU_USERNAME && OPENU_PASSWORD && OPENU_ID) },
+      { feature: 'email-notifications',  available: !!(GMAIL_USER && GMAIL_APP_PASSWORD && NOTIFY_EMAIL) },
+    ];
+  }
+
+  onModuleInit() {
+    const missing = this.buildFeatureMap().filter((f) => !f.available);
+    if (missing.length) {
+      this.logger.warn(
+        `Features unavailable due to missing env vars: ${missing.map((f) => f.feature).join(', ')}`,
+      );
+    }
+  }
+
+  @Get('features')
+  getFeatures(): FeatureStatus[] {
+    return this.buildFeatureMap();
+  }
+
   private async check(
     envKey: string | undefined,
     envKeyName: string,
