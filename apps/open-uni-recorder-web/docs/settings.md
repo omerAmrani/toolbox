@@ -7,6 +7,14 @@ Single-page control panel at `/settings` for managing app configuration, the pro
 - Page: `/settings`
 - Calls multiple API endpoints; all cards load independently on mount
 
+**Feature health banner:**
+- Component: `app/components/FeatureHealthBanner.tsx`
+- Fetches `GET /api/health/features` on mount
+- Renders above the settings grid only when at least one feature is unavailable
+- Shows unavailable features by name with "לא מוגדר", available features as green pills
+- Dismiss button hides it for the session (not persisted)
+- No env var names are shown — feature names only
+
 **Data directory:**
 - Shows current data path
 - "בחר תיקייה" opens a native macOS folder picker via `POST /api/data-dir/pick` (osascript)
