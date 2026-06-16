@@ -1,8 +1,7 @@
 [build]
-buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @toolbox/open-uni-recorder-api build"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "node apps/open-uni-recorder-api/dist/src/main.js"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 
