@@ -3,7 +3,6 @@ buildCommand = "pnpm install --frozen-lockfile && pnpm --filter @toolbox/open-un
 
 [deploy]
 startCommand = "node apps/open-uni-recorder-api/dist/src/main.js"
-healthcheckPath = "/api/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 
