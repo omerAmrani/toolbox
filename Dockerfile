@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/node:20 AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,9 @@ COPY apps/open-uni-recorder-api ./apps/open-uni-recorder-api
 RUN pnpm --filter @toolbox/open-uni-recorder-api build
 
 
-FROM mcr.microsoft.com/playwright/node:20
+FROM node:20-slim
+
+RUN npx playwright install --with-deps chromium
 
 WORKDIR /app
 
