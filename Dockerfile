@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/node:20-jammy AS builder
+FROM mcr.microsoft.com/playwright/node:20 AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY apps/open-uni-recorder-api ./apps/open-uni-recorder-api
 RUN pnpm --filter @toolbox/open-uni-recorder-api build
 
 
-FROM mcr.microsoft.com/playwright/node:20-jammy
+FROM mcr.microsoft.com/playwright/node:20
 
 WORKDIR /app
 
