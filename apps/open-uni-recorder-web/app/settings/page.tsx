@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
-import { Status, fmtDate } from '@/app/components/Status';
+import { Status } from '@/app/components/Status';
 import FeatureHealthBanner from '@/app/components/FeatureHealthBanner';
 import { STATUS_LABEL, STATUS_COLOR } from '@/lib/status';
 
@@ -343,7 +343,7 @@ export default function SettingsPage() {
     setModels((m) => ({ ...m, [key]: { status: 'testing', msg: 'שולח בקשה...' } }));
     try {
       const data: { ok?: boolean; configured?: boolean; error?: string; ms?: number; response?: string } =
-        await fetch(apiUrl(`/api/health/${key}`)).then((r) => r.json());
+        await fetch(apiUrl(`/health/${key}`)).then((r) => r.json());
       if (!data.configured) {
         setModels((m) => ({ ...m, [key]: { status: 'warning', msg: data.error || 'מפתח API לא מוגדר' } }));
       } else if (data.ok) {

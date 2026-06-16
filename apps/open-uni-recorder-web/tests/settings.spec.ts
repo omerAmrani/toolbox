@@ -10,7 +10,7 @@ test.describe('Settings page', () => {
   });
 
   test('Gemini health check shows ok and latency after API responds', async ({ page }) => {
-    await page.route(`${API}/api/health/gemini`, (route) =>
+    await page.route(`${API}/health/gemini`, (route) =>
       route.fulfill({
         json: { ok: true, configured: true, ms: 145, response: 'ok' },
       }),
@@ -26,7 +26,7 @@ test.describe('Settings page', () => {
   });
 
   test('Claude health check shows error state when API returns not ok', async ({ page }) => {
-    await page.route(`${API}/api/health/claude`, (route) =>
+    await page.route(`${API}/health/claude`, (route) =>
       route.fulfill({
         json: { ok: false, configured: true, error: 'Invalid API key' },
       }),

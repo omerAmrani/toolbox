@@ -9,7 +9,7 @@ Single-page control panel at `/settings` for managing app configuration, the pro
 
 **Feature health banner:**
 - Component: `app/components/FeatureHealthBanner.tsx`
-- Fetches `GET /api/health/features` on mount
+- Fetches `GET /health/features` on mount
 - Renders above the settings grid only when at least one feature is unavailable
 - Shows unavailable features by name with "לא מוגדר", available features as green pills
 - Dismiss button hides it for the session (not persisted)

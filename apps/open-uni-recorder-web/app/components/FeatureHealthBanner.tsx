@@ -20,7 +20,7 @@ export default function FeatureHealthBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    fetch(apiUrl('/api/health/features'))
+    fetch(apiUrl('/health/features'))
       .then((r) => r.json())
       .then(setFeatures)
       .catch(() => {});
