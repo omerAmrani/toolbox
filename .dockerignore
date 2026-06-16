@@ -1,0 +1,50 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+**/dist
+.next
+**/.next
+build
+**/build
+
+# Test & coverage
+coverage
+**/coverage
+test-results
+**/test-results
+
+# Temp/runtime
+tmp
+**/tmp
+*.log
+**/*.log
+
+# Secrets
+.env
+.env.local
+**/.env
+**/.env.local
+**/.env*.local
+
+# Dev tooling
+.turbo
+**/.turbo
+.git
+.gitignore
+.dockerignore
+
+# Editors
+.idea
+.vscode
+*.swp
+*.swo
+
+# Misc
+open-uni-deployment.md
+todo-features.md
+README.md
+docs
+**/docs
