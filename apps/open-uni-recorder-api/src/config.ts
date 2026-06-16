@@ -19,7 +19,7 @@ export const {
   GMAIL_USER,
   GMAIL_APP_PASSWORD,
   NOTIFY_EMAIL,
-  API_PORT = '3001',
+  PORT = '3001',
   WEB_ORIGIN = 'http://localhost:3000',
 } = process.env;
 

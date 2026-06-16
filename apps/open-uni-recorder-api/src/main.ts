@@ -4,7 +4,7 @@ dotenv.config();
 
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { API_PORT, WEB_ORIGIN } from './config';
+import { PORT, WEB_ORIGIN } from './config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -12,10 +12,10 @@ async function bootstrap() {
     origin: WEB_ORIGIN,
   });
 
-  const port = API_PORT;
-  await app.listen(port);
+  const port = PORT;
+  await app.listen(port, '0.0.0.0');
   console.log(`\n🔧  Open University API`);
-  console.log(`🌐  http://localhost:${port}\n`);
+  console.log(`🌐  Listening on 0.0.0.0:${port}\n`);
 }
 
 bootstrap();

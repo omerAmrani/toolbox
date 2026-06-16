@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "start": "node dist/src/main.js",
     "start:prod": "node dist/src/main.js",
     "install:playwright": "npx playwright install chromium",
     "test": "NODE_ENV=test jest --runInBand",
