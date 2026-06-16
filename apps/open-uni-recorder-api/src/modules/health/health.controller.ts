@@ -22,7 +22,7 @@ interface FeatureStatus {
   available: boolean;
 }
 
-@Controller('api/health')
+@Controller('health')
 export class HealthController implements OnModuleInit {
   private readonly logger = new Logger(HealthController.name);
   private buildFeatureMap(): FeatureStatus[] {

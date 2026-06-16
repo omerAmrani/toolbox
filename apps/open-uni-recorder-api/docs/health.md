@@ -8,11 +8,11 @@ Tests AI backend connectivity and latency. Used by the settings page to verify A
 - Controller: `HealthController`
 
 Routes:
-- `GET /api/health/gemini`
-- `GET /api/health/claude`
-- `GET /api/health/features`
+- `GET /health/gemini`
+- `GET /health/claude`
+- `GET /health/features`
 
-### `/api/health/gemini` and `/api/health/claude`
+### `/health/gemini` and `/health/claude`
 
 Response: `{ ok: boolean, configured: boolean, ms?: number, response?: string, error?: string }`
 
@@ -20,7 +20,7 @@ Response: `{ ok: boolean, configured: boolean, ms?: number, response?: string, e
 - `configured: true, ok: true` — backend responded successfully
 - `configured: true, ok: false` — key set but request failed
 
-### `/api/health/features`
+### `/health/features`
 
 Returns the availability of each app feature based on env var presence at startup. Missing var names are never exposed — only feature names and availability.
 
