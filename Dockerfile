@@ -2,6 +2,8 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+
 RUN npm install -g pnpm@9
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -18,6 +20,8 @@ RUN pnpm --filter @toolbox/open-uni-recorder-api build
 FROM node:20-slim
 
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g pnpm@9
 
