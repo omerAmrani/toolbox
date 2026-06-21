@@ -46,8 +46,12 @@ Import as: import { ... } from "@toolbox/ai"
 ## Docs
 
 - `docs/` inside each app is the source for feature-specific documentation
-- When adding or changing a feature, update or create the relevant doc in `docs/`
+- When adding or changing a feature, update or create only the doc file(s) for that feature — if the feature spans multiple docs, update each affected one, but don't touch unrelated docs in the same `docs/` dir
 - Docs are written in English, markdown format
+
+## Testing
+
+- Each feature has one spec file named after its module/route (e.g. `test/lectures.spec.ts`, `tests/settings.spec.ts`) — after a change, run only that file: `pnpm --filter=@toolbox/<app-name> test <feature>.spec.ts`
 
 ## Before Writing Any Code
 
