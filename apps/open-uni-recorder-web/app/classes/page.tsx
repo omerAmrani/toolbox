@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
-import { getClassColor, isClassArchived, classIcon } from '@/lib/classMeta';
+import { getClassColor, classIcon } from '@/lib/classMeta';
 import NewCourseModal from '@/app/components/NewCourseModal';
 
 interface ClassRow {
@@ -27,7 +27,6 @@ export default function ClassesPage() {
   const [classes, setClasses] = useState<ClassRow[] | null>(null);
   const [lecturesByClass, setLecturesByClass] = useState<Record<string, LectureRow[]>>({});
   const [modalOpen, setModalOpen] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'active' | 'archive'>('all');
 
   const loadClasses = async () => {
     try {
@@ -73,27 +72,9 @@ export default function ClassesPage() {
     };
   }, [classes]);
 
-  const allLectures = useMemo(
-    () => Object.values(lecturesByClass).flat(),
-    [lecturesByClass],
-  );
-  const summarizedCount = allLectures.filter(
-    (l) => l.status === 'summarized' || l.status === 'done',
-  ).length;
-  const pendingCount = allLectures.filter((l) => l.status === 'pending').length;
-  const attentionCount = allLectures.filter(
-    (l) => l.status === 'error' || l.status === 'failed' || l.status === 'aborted',
-  ).length;
-
-  const partitioned = useMemo(() => {
-    const list = classes ?? [];
-    const active: ClassRow[] = [];
-    const archived: ClassRow[] = [];
-    for (const c of list) {
-      if (isClassArchived(c.id)) archived.push(c);
-      else active.push(c);
-    }
-    const sortFn = (a: ClassRow, b: ClassRow) => {
+  const visible = useMemo(() => {
+    const list = [...(classes ?? [])];
+    list.sort((a, b) => {
       const ya = a.year ?? 0;
       const yb = b.year ?? 0;
       if (yb !== ya) return yb - ya;
@@ -101,77 +82,12 @@ export default function ClassesPage() {
       const sb = SEMESTER_ORDER[b.semester ?? ''] ?? 0;
       if (sb !== sa) return sb - sa;
       return a.name.localeCompare(b.name, 'he');
-    };
-    active.sort(sortFn);
-    archived.sort(sortFn);
-    return { active, archived };
+    });
+    return list;
   }, [classes]);
-
-  const visible =
-    filter === 'all'
-      ? [...partitioned.active, ...partitioned.archived]
-      : filter === 'archive'
-        ? partitioned.archived
-        : partitioned.active;
 
   return (
     <div className="page fade-in">
-      <div className="display-h">
-        <div className="display-h__eye">העמוד הראשי</div>
-        <h1 className="display-h__title">הספרייה האקדמית שלי.</h1>
-        <p className="display-h__sub">
-          {(classes?.length ?? 0)} קורסים, {allLectures.length} הרצאות. כל הקלטה
-          מומרת לטקסט, מתוכלת ומסוכמת באופן אוטומטי.
-        </p>
-      </div>
-
-      <div className="glance">
-        <div className="glance__cell">
-          <div className="glance__n">
-            {summarizedCount}
-            <small>/ {allLectures.length}</small>
-          </div>
-          <div className="glance__l">הרצאות מסוכמות</div>
-        </div>
-        <div className="glance__cell">
-          <div className="glance__n">{pendingCount}</div>
-          <div className="glance__l">ממתינות לעיבוד</div>
-        </div>
-        <div className="glance__cell">
-          <div
-            className="glance__n"
-            style={attentionCount > 0 ? { color: 'var(--st-error)' } : undefined}
-          >
-            {attentionCount}
-          </div>
-          <div className="glance__l">דורשות תשומת לב</div>
-        </div>
-      </div>
-
-      <div className="semester-strip">
-        <button
-          className={filter === 'all' ? 'is-active' : ''}
-          onClick={() => setFilter('all')}
-        >
-          הכל{' '}
-          <span className="semester-strip__count">{classes?.length ?? 0}</span>
-        </button>
-        <button
-          className={filter === 'active' ? 'is-active' : ''}
-          onClick={() => setFilter('active')}
-        >
-          פעילים{' '}
-          <span className="semester-strip__count">{partitioned.active.length}</span>
-        </button>
-        <button
-          className={filter === 'archive' ? 'is-active' : ''}
-          onClick={() => setFilter('archive')}
-        >
-          ארכיון{' '}
-          <span className="semester-strip__count">{partitioned.archived.length}</span>
-        </button>
-      </div>
-
       {classes !== null && classes.length === 0 ? (
         <div className="class-grid">
           <div className="class-new" data-testid="create-class-btn" onClick={() => setModalOpen(true)}>

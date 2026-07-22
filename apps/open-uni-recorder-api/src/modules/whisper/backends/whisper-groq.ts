@@ -41,6 +41,9 @@ export async function transcribe(audioPath: string, retries = 5): Promise<{ text
         await waitMs(waitTime);
         continue;
       }
+      if (err?.status === 401) {
+        throw new Error('Groq API key invalid or expired — check GROQ_API_KEY in .env');
+      }
       throw err;
     }
   }

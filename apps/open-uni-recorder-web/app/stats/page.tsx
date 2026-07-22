@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiUrl } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
-import { classIcon, isClassArchived } from '@/lib/classMeta';
+import { classIcon } from '@/lib/classMeta';
 
 interface ClassRow {
   id: string;
@@ -90,9 +90,10 @@ export default function StatsPage() {
 
   const inProcessing = summarizing + transcribing + processing;
 
+  // ponytail: class-level archive removed, stats page is unreachable/deprecated anyway
   const classList = classes ?? [];
-  const activeClasses = classList.filter((c) => !isClassArchived(c.id));
-  const archivedClasses = classList.filter((c) => isClassArchived(c.id));
+  const activeClasses = classList;
+  const archivedClasses: ClassRow[] = [];
 
   const distSegments = [
     { key: 'summarized', count: summarized, color: 'var(--st-summarized)', label: 'מסוכמות' },

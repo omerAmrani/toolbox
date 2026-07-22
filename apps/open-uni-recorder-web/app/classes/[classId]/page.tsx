@@ -7,14 +7,7 @@ import { SEMESTER_HE } from '@/lib/status';
 import { streamSSE } from '@/lib/sse';
 import { useToast } from '@/app/components/Toast';
 import { Status, fmtDateLong } from '@/app/components/Status';
-import {
-  getClassColor,
-  classIcon,
-  isClassArchived,
-  setClassArchived,
-  isLectureArchived,
-  setLectureArchived,
-} from '@/lib/classMeta';
+import { getClassColor, classIcon } from '@/lib/classMeta';
 
 interface ClassInfo {
   id: string;
@@ -44,13 +37,7 @@ export default function ClassDetailPage() {
   const [opalUrl, setOpalUrl] = useState('');
   const [editingUrl, setEditingUrl] = useState(false);
   const [lectures, setLectures] = useState<Lecture[] | null>(null);
-  const [archivedRefresh, setArchivedRefresh] = useState(0);
-  const [classArchivedState, setClassArchivedState] = useState(false);
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
-  const [addLectureOpen, setAddLectureOpen] = useState(false);
-  const [newLectureName, setNewLectureName] = useState('');
-  const [newLectureUrl, setNewLectureUrl] = useState('');
-  const [addLectureSubmitting, setAddLectureSubmitting] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadClass = useCallback(async () => {
@@ -63,7 +50,6 @@ export default function ClassDetailPage() {
       }
       setCls(found);
       setOpalUrl(found.opalCourseUrl || '');
-      setClassArchivedState(isClassArchived(found.id));
       document.title = `${found.name} — האוניברסיטה הפתוחה`;
     } catch {
       setNotFound(true);
@@ -107,16 +93,14 @@ export default function ClassDetailPage() {
 
   const orderedLectures = useMemo(() => {
     if (!lectures) return [] as (Lecture & { n: number })[];
-    const visible = lectures.filter((l) => !isLectureArchived(l.id));
-    void archivedRefresh;
-    const sorted = [...visible].sort((a, b) => {
+    const sorted = [...lectures].sort((a, b) => {
       const da = a.lectureDate ? new Date(a.lectureDate).getTime() : 0;
       const db = b.lectureDate ? new Date(b.lectureDate).getTime() : 0;
       if (da !== db) return da - db;
       return a.name.localeCompare(b.name, 'he');
     });
     return sorted.map((l, i) => ({ ...l, n: i + 1 }));
-  }, [lectures, archivedRefresh]);
+  }, [lectures]);
 
   const summarizedCount = orderedLectures.filter(
     (l) => l.status === 'summarized' || l.status === 'done',
@@ -137,24 +121,6 @@ export default function ClassDetailPage() {
     }
   };
 
-  const syncNow = async () => {
-    try {
-      showToast('סנכרון התחיל');
-      await streamSSE('/api/classes/sync', {}, () => {});
-      showToast('סנכרון הסתיים');
-      loadLectures();
-    } catch {
-      showToast('שגיאה בסנכרון', true);
-    }
-  };
-
-  const toggleArchiveClass = () => {
-    const next = !classArchivedState;
-    setClassArchived(classId, next);
-    setClassArchivedState(next);
-    showToast(next ? 'הקורס בארכיון' : 'הקורס שוחזר');
-  };
-
   const deleteClass = async () => {
     if (!confirm('למחוק את הקורס וכל ההרצאות שלו?')) return;
     const r = await fetch(apiUrl(`/api/classes/${classId}`), { method: 'DELETE' });
@@ -163,24 +129,6 @@ export default function ClassDetailPage() {
       router.push('/classes');
     } else {
       showToast('שגיאה במחיקה', true);
-    }
-  };
-
-  const addLecture = async () => {
-    if (!newLectureName.trim()) return;
-    setAddLectureSubmitting(true);
-    try {
-      await fetch(apiUrl(`/api/classes/${classId}/lectures`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newLectureName.trim(), url: newLectureUrl.trim() }),
-      });
-      setAddLectureOpen(false);
-      setNewLectureName('');
-      setNewLectureUrl('');
-      loadLectures();
-    } finally {
-      setAddLectureSubmitting(false);
     }
   };
 
@@ -271,13 +219,6 @@ export default function ClassDetailPage() {
     }
   };
 
-  const archiveLecture = (lectureId: string) => {
-    const next = !isLectureArchived(lectureId);
-    setLectureArchived(lectureId, next);
-    setArchivedRefresh((n) => n + 1);
-    showToast(next ? 'בארכיון' : 'שוחזר');
-  };
-
   const deleteLecture = async (lectureId: string) => {
     if (!confirm('למחוק את ההרצאה?')) return;
     const r = await fetch(
@@ -306,18 +247,9 @@ export default function ClassDetailPage() {
 
   return (
     <div className="page fade-in">
-      <button
-        className="btn btn--ghost btn--sm"
-        style={{ marginBottom: 'var(--gap-lg)' }}
-        onClick={() => router.push('/classes')}
-      >
-        ← חזרה לקורסים
-      </button>
-
       <div className="detail-h" data-color={color}>
         <div className="detail-h__mark">{classIcon(cls.name)}</div>
         <div className="detail-h__body">
-          <div className="detail-h__code">— · האוניברסיטה הפתוחה</div>
           <h1 className="detail-h__title">{cls.name}</h1>
           <div className="detail-h__meta">
             {meta && (
@@ -332,33 +264,7 @@ export default function ClassDetailPage() {
           </div>
         </div>
         <div className="detail-h__actions">
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={syncNow}
-            title="סנכרון הרצאות חדשות"
-          >
-            ⟳ סנכרן
-          </button>
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={toggleArchiveClass}
-            title={classArchivedState ? 'שחזר מארכיון' : 'העבר לארכיון'}
-          >
-            {classArchivedState ? '↺' : '🗄'}
-          </button>
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={deleteClass}
-            title="מחק קורס"
-          >
-            🗑
-          </button>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 'var(--gap-lg)' }}>
-        {editingUrl ? (
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {editingUrl ? (
             <input
               type="url"
               dir="ltr"
@@ -375,74 +281,31 @@ export default function ClassDetailPage() {
               }}
               placeholder="https://opal.openu.ac.il/course/..."
               style={{
-                flex: 1,
-                padding: '8px 12px',
+                padding: '6px 10px',
                 border: '1px solid var(--line)',
                 borderRadius: 8,
                 background: 'var(--surface)',
-                font: '0.85rem/1 var(--font-mono)',
+                font: '0.8rem/1 var(--font-mono)',
               }}
             />
-          </div>
-        ) : (
+          ) : (
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => setEditingUrl(true)}
+              title="ערוך קישור OPAL"
+            >
+              ✎ קישור
+            </button>
+          )}
           <button
-            onClick={() => setEditingUrl(true)}
-            style={{
-              font: '0.85rem/1.4 var(--font-mono)',
-              color: 'var(--muted)',
-              textAlign: 'start',
-              direction: 'ltr',
-              cursor: 'text',
-            }}
+            className="btn btn--ghost btn--sm"
+            onClick={deleteClass}
+            title="מחק קורס"
           >
-            {cls.opalCourseUrl || '+ הוסף קישור OPAL'}
+            🗑
           </button>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--gap-sm)' }}>
-        <button
-          className="btn btn--sm"
-          data-testid="add-lecture-btn"
-          onClick={() => setAddLectureOpen(true)}
-        >
-          + הוסף הרצאה
-        </button>
-      </div>
-
-      {addLectureOpen && (
-        <div className="modal-bg" onClick={(e) => { if (e.target === e.currentTarget) setAddLectureOpen(false); }}>
-          <div className="modal">
-            <h2 className="modal__title">הוספת הרצאה</h2>
-            <div className="modal__field">
-              <label>שם ההרצאה</label>
-              <input
-                type="text"
-                data-testid="lecture-name-input"
-                value={newLectureName}
-                onChange={(e) => setNewLectureName(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="modal__field">
-              <label>קישור</label>
-              <input
-                type="url"
-                dir="ltr"
-                data-testid="lecture-url-input"
-                value={newLectureUrl}
-                onChange={(e) => setNewLectureUrl(e.target.value)}
-              />
-            </div>
-            <div className="modal__actions">
-              <button className="btn btn--ghost btn--sm" onClick={() => setAddLectureOpen(false)} disabled={addLectureSubmitting}>ביטול</button>
-              <button className="btn" data-testid="add-lecture-submit" onClick={addLecture} disabled={addLectureSubmitting}>
-                {addLectureSubmitting ? '...' : 'הוסף'}
-              </button>
-            </div>
-          </div>
         </div>
-      )}
+      </div>
 
       {lectures === null ? (
         <div style={{ color: 'var(--muted)' }}>טוען...</div>
@@ -523,13 +386,6 @@ export default function ClassDetailPage() {
                         ↺ בטל דילוג
                       </button>
                     )}
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      onClick={() => archiveLecture(l.id)}
-                      title="העבר לארכיון"
-                    >
-                      🗄
-                    </button>
                     <button
                       className="btn btn--ghost btn--sm"
                       data-testid="delete-lecture-btn"

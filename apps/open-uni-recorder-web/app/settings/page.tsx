@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { Status } from '@/app/components/Status';
 import FeatureHealthBanner from '@/app/components/FeatureHealthBanner';
-import { STATUS_LABEL, STATUS_COLOR } from '@/lib/status';
+import { STATUS_LABEL, STATUS_COLOR, SEMESTER_HE } from '@/lib/status';
+import {SEMESTER_ORDER, getSelectedSemester, setSelectedSemester} from '@/lib/selectedSemester';
 
 interface DataDirInfo {
   current: string;
@@ -39,6 +39,8 @@ interface ClassRow {
   id: string;
   name: string;
   opalCourseUrl?: string | null;
+  semester?: string | null;
+  year?: number | null;
 }
 
 interface Lecture {
@@ -59,6 +61,8 @@ interface NewLecture {
 interface SyncSection {
   classId: string;
   className: string;
+  semester?: string | null;
+  year?: number | null;
   existing: Lecture[];
   newLectures: NewLecture[];
 }
@@ -78,51 +82,51 @@ const MODELS: { key: ModelKey; emoji: string; name: string; sub: string; role: s
   { key: 'claude', emoji: 'C', name: 'Claude', sub: 'Anthropic · claude-haiku-4-5-20251001', role: 'סיכומים' },
 ];
 
-function SettingsToggle({ label, defaultOn }: { label: string; defaultOn?: boolean }) {
-  const [on, setOn] = useState(!!defaultOn);
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '12px 0',
-        borderBottom: '1px solid var(--line)',
-        cursor: 'pointer',
-      }}
-      onClick={() => setOn(!on)}
-    >
-      <span style={{ fontSize: '0.9rem' }}>{label}</span>
-      <span
-        style={{
-          width: 36,
-          height: 20,
-          background: on ? 'var(--ink)' : 'var(--line-2)',
-          borderRadius: 999,
-          position: 'relative',
-          transition: 'background 0.15s',
-          flexShrink: 0,
-        }}
-      >
-        <span
-          style={{
-            position: 'absolute',
-            insetBlockStart: 2,
-            insetInlineEnd: on ? 2 : 18,
-            width: 16,
-            height: 16,
-            background: 'var(--bg)',
-            borderRadius: '50%',
-            transition: 'inset-inline-end 0.15s',
-          }}
-        />
-      </span>
-    </div>
-  );
-}
+// ponytail: SettingsToggle only used by the commented-out notifications card below
+// function SettingsToggle({ label, defaultOn }: { label: string; defaultOn?: boolean }) {
+//   const [on, setOn] = useState(!!defaultOn);
+//   return (
+//     <div
+//       style={{
+//         display: 'flex',
+//         justifyContent: 'space-between',
+//         alignItems: 'center',
+//         padding: '12px 0',
+//         borderBottom: '1px solid var(--line)',
+//         cursor: 'pointer',
+//       }}
+//       onClick={() => setOn(!on)}
+//     >
+//       <span style={{ fontSize: '0.9rem' }}>{label}</span>
+//       <span
+//         style={{
+//           width: 36,
+//           height: 20,
+//           background: on ? 'var(--ink)' : 'var(--line-2)',
+//           borderRadius: 999,
+//           position: 'relative',
+//           transition: 'background 0.15s',
+//           flexShrink: 0,
+//         }}
+//       >
+//         <span
+//           style={{
+//             position: 'absolute',
+//             insetBlockStart: 2,
+//             insetInlineEnd: on ? 2 : 18,
+//             width: 16,
+//             height: 16,
+//             background: 'var(--bg)',
+//             borderRadius: '50%',
+//             transition: 'inset-inline-end 0.15s',
+//           }}
+//         />
+//       </span>
+//     </div>
+//   );
+// }
 
 export default function SettingsPage() {
-  const router = useRouter();
   const [dataDir, setDataDir] = useState<DataDirInfo | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState<string | null>(null);
   const [dataDirHasDb, setDataDirHasDb] = useState(false);
@@ -137,12 +141,9 @@ export default function SettingsPage() {
   const queueRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [syncSections, setSyncSections] = useState<SyncSection[]>([]);
+  const [selectedSemesterKey, setSelectedSemesterKey] = useState(getSelectedSemester);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [cronTestMsg, setCronTestMsg] = useState<{ msg: string; error?: boolean } | null>(null);
-  const [testingCron, setTestingCron] = useState(false);
-
-  const [archive, setArchive] = useState<(Lecture & { classId: string; className: string })[]>([]);
 
   const [models, setModels] = useState<Record<ModelKey, ModelState>>({
     gemini: { status: 'idle', msg: 'לא נבדק' },
@@ -182,20 +183,6 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
 
-  const loadArchive = useCallback(async () => {
-    try {
-      const classes: ClassRow[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
-      const rows: (Lecture & { classId: string; className: string })[] = [];
-      for (const cls of classes) {
-        const lectures: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`)).then((r) => r.json()).catch(() => []);
-        for (const l of lectures) {
-          if (l.status === 'skipped') rows.push({ ...l, classId: cls.id, className: cls.name });
-        }
-      }
-      setArchive(rows);
-    } catch { /* ignore */ }
-  }, []);
-
   const initSyncPanel = useCallback(async () => {
     try {
       const classes: ClassRow[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
@@ -203,23 +190,50 @@ export default function SettingsPage() {
       const sections = await Promise.all(
         linked.map(async (cls) => {
           const existing: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`)).then((r) => r.json()).catch(() => []);
-          return { classId: cls.id, className: cls.name, existing, newLectures: [] as NewLecture[] };
+          return { classId: cls.id, className: cls.name, semester: cls.semester, year: cls.year, existing, newLectures: [] as NewLecture[] };
         }),
       );
       setSyncSections(sections);
     } catch { /* ignore */ }
   }, []);
 
+  const semesterOptions = useMemo(() => {
+    const seen = new Map<string, { key: string; label: string; year: number; semester: string }>();
+    for (const s of syncSections) {
+      if (!s.semester || !s.year) continue;
+      const key = `${s.semester}-${s.year}`;
+      if (!seen.has(key)) seen.set(key, { key, label: `${SEMESTER_HE[s.semester] || s.semester} ${s.year}`, year: s.year, semester: s.semester });
+    }
+    return [...seen.values()].sort((a, b) => {
+      if (b.year !== a.year) return b.year - a.year;
+      return (SEMESTER_ORDER[b.semester] ?? 0) - (SEMESTER_ORDER[a.semester] ?? 0);
+    });
+  }, [syncSections]);
+
+  useEffect(() => {
+    if (semesterOptions.length === 0) return;
+    if (semesterOptions.some((o) => o.key === selectedSemesterKey)) return;
+    setSelectedSemesterKey(semesterOptions[0]!.key);
+  }, [semesterOptions, selectedSemesterKey]);
+
+  useEffect(() => {
+    if (selectedSemesterKey) setSelectedSemester(selectedSemesterKey);
+  }, [selectedSemesterKey]);
+
+  const visibleSyncSections = useMemo(
+    () => syncSections.filter((s) => `${s.semester}-${s.year}` === selectedSemesterKey),
+    [syncSections, selectedSemesterKey],
+  );
+
   useEffect(() => {
     loadDataDir();
     loadQueue();
     loadCronLog();
     initSyncPanel();
-    loadArchive();
     return () => {
       if (queueRefreshTimer.current) { clearInterval(queueRefreshTimer.current); queueRefreshTimer.current = null; }
     };
-  }, [loadDataDir, loadQueue, loadCronLog, initSyncPanel, loadArchive]);
+  }, [loadDataDir, loadQueue, loadCronLog, initSyncPanel]);
 
   const pickDataDir = async () => {
     setPickingDir(true);
@@ -263,7 +277,9 @@ export default function SettingsPage() {
     setSyncing(true);
     setSyncProgress('מתחיל...');
     try {
-      await streamSSE('/api/classes/sync', {}, (ev) => {
+      const selected = semesterOptions.find((o) => o.key === selectedSemesterKey);
+      const body = selected ? { semester: selected.semester, year: selected.year } : {};
+      await streamSSE('/api/classes/sync', body, (ev) => {
         if (ev.type === 'progress') setSyncProgress(String(ev.message));
         else if (ev.type === 'class') {
           const classId = String(ev.classId);
@@ -293,6 +309,9 @@ export default function SettingsPage() {
             : s,
         ),
       );
+      // starts immediately if idle; no-ops server-side if a lecture is already processing
+      await fetch(apiUrl('/api/classes/run-queue'), { method: 'POST' });
+      loadQueue();
     }
   };
 
@@ -307,36 +326,17 @@ export default function SettingsPage() {
     });
     if (r.ok) {
       setSyncSections((prev) => prev.map((s) => s.classId === classId ? { ...s, newLectures: s.newLectures.filter((_, i) => i !== idx) } : s));
-      loadArchive();
     }
   };
 
   const skipFromQueue = async (classId: string, lectureId: string) => {
     const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/skip`), { method: 'POST' });
-    if (r.ok) { loadQueue(); loadArchive(); }
-  };
-
-  const unskipLecture = async (classId: string, lectureId: string) => {
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/unskip`), { method: 'POST' });
-    if (r.ok) { loadArchive(); loadQueue(); }
+    if (r.ok) loadQueue();
   };
 
   const triggerPipeline = async () => {
     await fetch(apiUrl('/api/classes/run-queue'), { method: 'POST' });
     await loadQueue();
-  };
-
-  const testCron = async () => {
-    setTestingCron(true);
-    setCronTestMsg({ msg: 'מזהה הרצאות חדשות...' });
-    try {
-      const data: { message?: string; found?: number } =
-        await fetch(apiUrl('/api/classes/run-pipeline'), { method: 'POST' }).then((r) => r.json());
-      setCronTestMsg({ msg: data.message || `נמצאו ${data.found ?? '?'} הרצאות חדשות` });
-      loadQueue();
-    } catch (err) {
-      setCronTestMsg({ msg: `שגיאה: ${err instanceof Error ? err.message : 'שגיאה'}`, error: true });
-    } finally { setTestingCron(false); }
   };
 
   const testModel = async (key: ModelKey) => {
@@ -366,34 +366,6 @@ export default function SettingsPage() {
 
   return (
     <div className="page fade-in">
-      <div className="display-h">
-        <div className="display-h__eye">תצורה ובריאות</div>
-        <h1 className="display-h__title">הגדרות.</h1>
-        <p className="display-h__sub">
-          ניהול מודלי בינה מלאכותית, תור עיבוד, וזיהוי אוטומטי של הרצאות חדשות
-          מאזור הקורס בפורטל האוניברסיטה הפתוחה.
-        </p>
-      </div>
-
-      {/* Account Card — static (decision 7) */}
-      <div className="account" style={{ marginBottom: 'var(--gap)' }}>
-        <div className="account__avatar">פ</div>
-        <div>
-          <div className="account__uni">האוניברסיטה הפתוחה</div>
-          <div className="account__user">—</div>
-          <div className="account__pill">חיבור לא מוגדר</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
-          <button
-            className="btn btn--ghost btn--sm"
-            style={{ background: 'transparent', color: 'var(--bg)', borderColor: 'color-mix(in srgb, var(--bg) 30%, transparent)' }}
-            onClick={() => router.push('/setup')}
-          >
-            ↗ הגדר חשבון
-          </button>
-        </div>
-      </div>
-
       <FeatureHealthBanner />
 
       <div className="settings-grid">
@@ -407,11 +379,19 @@ export default function SettingsPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
+              {semesterOptions.length > 0 && (
+                <select
+                  className="select-field"
+                  value={selectedSemesterKey}
+                  onChange={(e) => setSelectedSemesterKey(e.target.value)}
+                >
+                  {semesterOptions.map((o) => (
+                    <option key={o.key} value={o.key}>{o.label}</option>
+                  ))}
+                </select>
+              )}
               <button className="btn btn--ghost btn--sm" onClick={runSync} disabled={syncing}>
                 {syncing ? 'מחפש...' : '🔍 בדוק עכשיו'}
-              </button>
-              <button className="btn btn--ghost btn--sm" onClick={testCron} disabled={testingCron}>
-                {testingCron ? 'מריץ...' : '▶ קרון'}
               </button>
             </div>
           </div>
@@ -419,19 +399,13 @@ export default function SettingsPage() {
           {syncProgress && (
             <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: 12 }}>{syncProgress}</div>
           )}
-          {cronTestMsg && (
-            <div style={{ fontSize: '0.85rem', color: cronTestMsg.error ? 'var(--danger)' : 'var(--good)', marginBottom: 12 }}>
-              {cronTestMsg.msg}
-            </div>
-          )}
-
           <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-            {syncSections.length === 0 ? (
+            {visibleSyncSections.length === 0 ? (
               <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-                אין קורסים עם קישור OPAL — הגדר קישור בדף הקורס
+                אין קורסים עם קישור OPAL לסמסטר הנבחר
               </div>
             ) : (
-              syncSections.map((s) => (
+              visibleSyncSections.map((s) => (
                 <div key={s.classId} style={{ marginBottom: 12 }}>
                   <div style={{ font: '600 0.85rem/1 var(--font-ui)', marginBottom: 6 }}>{s.className}</div>
                   {s.existing.map((l, i) => (
@@ -458,23 +432,10 @@ export default function SettingsPage() {
               ))
             )}
 
-            {/* Archive */}
-            {archive.length > 0 && (
-              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line)' }}>
-                <div style={{ font: '600 0.85rem/1 var(--font-ui)', marginBottom: 8, color: 'var(--muted)' }}>ארכיון — דולגו</div>
-                {archive.map((l) => (
-                  <div key={`${l.classId}-${l.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
-                    <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>{l.className}</span>
-                    <span style={{ flex: 1, color: 'var(--ink-2)' }}>{l.name}</span>
-                    <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.75rem', padding: '4px 8px' }} onClick={() => unskipLecture(l.classId, l.id)}>↩ הוצא</button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Notifications — static (decision 9) */}
+        {/* ponytail: notifications placeholder commented out, not removed
         <div className="set-card">
           <div className="set-card__h">
             <div>
@@ -487,6 +448,7 @@ export default function SettingsPage() {
           <SettingsToggle label="סיכום שבועי במייל" />
           <SettingsToggle label="התראת WhatsApp (ניסיוני)" />
         </div>
+        */}
 
         {/* Storage card */}
         <div className="set-card">

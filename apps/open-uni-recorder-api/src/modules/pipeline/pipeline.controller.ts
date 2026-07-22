@@ -63,7 +63,10 @@ export class PipelineController {
     res.setHeader('Connection', 'keep-alive');
     const send = (data: any) => res.write(`data: ${JSON.stringify(data)}\n\n`);
 
-    const classes = this.storage.getClasses().filter((c: any) => c.opalCourseUrl);
+    const { semester, year } = req.body as { semester?: string; year?: number };
+    const classes = this.storage.getClasses().filter((c: any) =>
+      c.opalCourseUrl && (!semester || !year || (c.semester === semester && c.year === year)),
+    );
 
     if (!classes.length) {
       send({ type: 'done', results: [], message: 'אין קורסים עם קישור OPAL מוגדר' });

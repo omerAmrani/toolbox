@@ -171,6 +171,31 @@ describe('PipelineController', () => {
       expect(classEvent.error).toBe('Network error');
       expect(classEvent.newLectures).toEqual([]);
     });
+
+    it('only checks classes matching the given semester and year', async () => {
+      const clsA = storage.createClass({ name: 'Semester A Class', semester: 'A', year: 2025 });
+      storage.updateClassMeta(clsA.id, { opalCourseUrl: 'https://opal.example.com/course/a' });
+      const clsB = storage.createClass({ name: 'Semester B Class', semester: 'B', year: 2025 });
+      storage.updateClassMeta(clsB.id, { opalCourseUrl: 'https://opal.example.com/course/b' });
+
+      const res = await request(app.getHttpServer())
+        .post('/api/classes/sync')
+        .send({ semester: 'A', year: 2025 })
+        .buffer(true)
+        .parse((response, callback) => {
+          let data = '';
+          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          response.on('end', () => callback(null, data));
+        });
+
+      const events = parseSSE(typeof res.body === 'string' ? res.body : res.text);
+      const classEvents = events.filter((e: any) => e.type === 'class');
+
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledTimes(1);
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(clsA.id, expect.any(Function));
+      expect(classEvents).toHaveLength(1);
+      expect(classEvents[0]).toMatchObject({ classId: clsA.id });
+    });
   });
 
   describe('POST /api/classes/test-email', () => {

@@ -209,7 +209,7 @@ export class DownloadService {
       waitAll: async (): Promise<string> => {
         await new Promise<void>((resolve) => {
           const check = setInterval(() => {
-            if (active === 0 && pending.length === 0) { clearInterval(check); resolve(); }
+            if (active === 0 && (pending.length === 0 || firstError)) { clearInterval(check); resolve(); }
           }, 500);
         });
         if (firstError) throw firstError;

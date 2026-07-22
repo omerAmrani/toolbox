@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
+import { SEMESTER_HE } from '@/lib/status';
+import { SEMESTER_ORDER, useSelectedSemester } from '@/lib/selectedSemester';
 
 interface ClassRow {
   id: string;
   name: string;
   lectureCount: number;
+  semester?: string | null;
+  year?: number | null;
 }
 
 export default function Sidebar() {
@@ -28,6 +32,19 @@ export default function Sidebar() {
     };
   }, []);
 
+  const selectedSemesterKey = useSelectedSemester();
+  const semesterLabel = useMemo(() => {
+    const withSem = classes.filter((c) => c.semester && c.year);
+    const match =
+      withSem.find((c) => `${c.semester}-${c.year}` === selectedSemesterKey) ??
+      [...withSem].sort((a, b) => {
+        if ((b.year ?? 0) !== (a.year ?? 0)) return (b.year ?? 0) - (a.year ?? 0);
+        return (SEMESTER_ORDER[b.semester ?? ''] ?? 0) - (SEMESTER_ORDER[a.semester ?? ''] ?? 0);
+      })[0];
+    if (!match) return null;
+    return `סמסטר ${SEMESTER_HE[match.semester!] || match.semester} ${match.year}`;
+  }, [classes, selectedSemesterKey]);
+
   const at = (path: string) => pathname === path;
 
   return (
@@ -36,7 +53,7 @@ export default function Sidebar() {
         <div className="sb__mark">פ</div>
         <div>
           <div className="sb__name">פתוחה / רקורדר</div>
-          <div className="sb__sub">סמסטר אביב 2026</div>
+          <div className="sb__sub">{semesterLabel || '—'}</div>
         </div>
       </div>
 
@@ -47,10 +64,12 @@ export default function Sidebar() {
           הקורסים שלי
           <span className="sb__count">{classes.length}</span>
         </Link>
+        {/* ponytail: stats page deprecated for now, commented out not removed
         <Link className={'sb__item' + (at('/stats') ? ' is-active' : '')} href="/stats">
           <span className="sb__icon">≡</span>
           סטטיסטיקות
         </Link>
+        */}
         <Link className={'sb__item' + (at('/settings') ? ' is-active' : '')} href="/settings">
           <span className="sb__icon">⚙</span>
           הגדרות

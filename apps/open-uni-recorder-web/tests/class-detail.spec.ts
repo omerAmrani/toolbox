@@ -29,26 +29,6 @@ test.describe('Class detail page', () => {
     await expect(page.locator('h1')).toContainText('E2E Class Detail');
   });
 
-  test('back link returns to classes list', async ({ page }) => {
-    await page.goto(`/classes/${classId}`);
-    await page.getByText('← חזרה לקורסים').click();
-    await expect(page).toHaveURL('/classes');
-  });
-
-  test('adds a lecture via modal', async ({ page }) => {
-    await page.goto(`/classes/${classId}`);
-    await page.getByTestId('add-lecture-btn').click();
-    await page.getByTestId('lecture-name-input').fill('E2E Lecture');
-    await page.getByTestId('lecture-url-input').fill('https://example.com/lecture.mp4');
-    await page.getByTestId('add-lecture-submit').click();
-
-    const row = page.getByTestId('lecture-row').filter({ hasText: 'E2E Lecture' });
-    await expect(row).toBeVisible();
-
-    const link = await row.locator('a.lecture-link').getAttribute('href');
-    lectureId = link?.split('/lectures/')[1] ?? null;
-  });
-
   test('run pipeline button triggers transcribe + summarize SSE and shows success toast', async ({
     page,
     request,

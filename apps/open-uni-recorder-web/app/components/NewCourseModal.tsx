@@ -104,7 +104,7 @@ export default function NewCourseModal({ open, onClose, onCreated }: Props) {
         <div className="modal__row">
           <div className="modal__field">
             <label>סמסטר</label>
-            <select value={semester} onChange={(e) => setSemester(e.target.value)}>
+            <select className="select-field select-field--full" value={semester} onChange={(e) => setSemester(e.target.value)}>
               <option value="spring">אביב</option>
               <option value="summer">קיץ</option>
               <option value="fall">סתיו</option>

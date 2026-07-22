@@ -5,8 +5,8 @@ const API = 'http://localhost:3001';
 test.describe('Settings page', () => {
   test('renders without crash', async ({ page }) => {
     await page.goto('/settings');
-    // page has multiple sections — at least one heading is visible
-    await expect(page.locator('h1, h2').first()).toBeVisible();
+    // page has multiple sections — at least one section title is visible
+    await expect(page.locator('.set-card__title').first()).toBeVisible();
   });
 
   test('Gemini health check shows ok and latency after API responds', async ({ page }) => {

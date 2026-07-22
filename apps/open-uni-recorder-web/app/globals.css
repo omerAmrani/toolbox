@@ -143,6 +143,26 @@ a { color: inherit; text-decoration: none; }
 input, select, textarea { font: inherit; color: inherit; }
 ::selection { background: var(--accent); color: var(--accent-on); }
 
+.select-field {
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: 0.85rem/1.2 var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.select-field:hover {
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+}
+.select-field:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.select-field--full { width: 100%; }
+
 /* ── App shell ────────────────────────────────────────────────────────── */
 .app {
   display: grid;
@@ -1494,8 +1514,7 @@ input, select, textarea { font: inherit; color: inherit; }
   color: var(--muted);
   margin-bottom: 8px;
 }
-.modal__field input,
-.modal__field select {
+.modal__field input {
   width: 100%;
   padding: 11px 14px;
   background: var(--bg);
@@ -1510,8 +1529,7 @@ input, select, textarea { font: inherit; color: inherit; }
   font-family: var(--font-mono);
   font-size: 0.85rem;
 }
-.modal__field input:focus,
-.modal__field select:focus {
+.modal__field input:focus {
   border-color: var(--ink);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
 }
