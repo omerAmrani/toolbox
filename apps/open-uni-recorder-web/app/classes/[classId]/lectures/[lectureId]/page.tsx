@@ -410,9 +410,6 @@ export default function LecturePage() {
               ← הקודמת
             </button>
           )}
-          <button className="btn btn--ghost btn--sm" onClick={downloadMd} disabled={!summary}>
-            ↗ ייצוא
-          </button>
         </div>
       </div>
 
@@ -443,16 +440,27 @@ export default function LecturePage() {
               </button>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
+              {activeView === 'summary' && (
+                <button
+                  className="btn btn--ghost btn--sm"
+                  onClick={downloadMd}
+                  disabled={!summary}
+                  title="ייצוא"
+                >
+                  ⬇
+                </button>
+              )}
               <button
                 className="btn btn--ghost btn--sm"
                 onClick={copyActive}
                 disabled={!(activeView === 'transcript' ? transcript : summary)}
+                title="העתק"
               >
-                העתק
+                📋
               </button>
               {activeView === 'summary' && summary && (
-                <button className="btn btn--ghost btn--sm" onClick={deleteSummaryVersion}>
-                  מחק
+                <button className="btn btn--ghost btn--sm" onClick={deleteSummaryVersion} title="מחק">
+                  🗑
                 </button>
               )}
             </div>
@@ -500,11 +508,15 @@ export default function LecturePage() {
 
         <aside className="lec-aside">
           <div className="lec-aside__meta">
-            <div className="lec-aside__title">פרטי ההרצאה</div>
+            <div className="lec-aside__title">פרטי הסיכום</div>
             <dl>
               <div className="lec-aside__row">
                 <dt>סיכום</dt>
                 <dd>{lecture?.summarizeModel || '—'}</dd>
+              </div>
+              <div className="lec-aside__row">
+                <dt>עודכן</dt>
+                <dd>{fmtDateLong(lecture?.summarizedAt)}</dd>
               </div>
             </dl>
           </div>
