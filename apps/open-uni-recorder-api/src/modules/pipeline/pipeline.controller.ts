@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { PipelineService } from './pipeline.service';
 import { StorageService } from '../storage/storage.service';
@@ -15,8 +15,12 @@ export class PipelineController {
   ) {}
 
   @Get('queue')
-  getQueue(@Res() res: Response) {
-    const classes = this.storage.getClasses();
+  getQueue(@Query() query: { semester?: string; year?: string }, @Res() res: Response) {
+    const { semester } = query;
+    const year = query.year ? Number(query.year) : undefined;
+    const classes = this.storage.getClasses().filter((c: any) =>
+      !semester || !year || (c.semester === semester && c.year === year),
+    );
     const rows: any[] = [];
     for (const cls of classes) {
       for (const lecture of this.storage.getLectures(cls.id)) {

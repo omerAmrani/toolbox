@@ -14,7 +14,7 @@ interface TopbarProps {
   crumbs?: Crumb[];
 }
 
-function deriveCrumbs(pathname: string, className: string | null): Crumb[] {
+function deriveCrumbs(pathname: string, className: string | null, lectureName: string | null): Crumb[] {
   const segments = pathname.split('/').filter(Boolean);
   if (segments.length === 0) return [{ label: 'בית' }];
 
@@ -24,7 +24,9 @@ function deriveCrumbs(pathname: string, className: string | null): Crumb[] {
     if (segments[1]) {
       crumbs.push({ label: className ?? segments[1], href: `/classes/${segments[1]}` });
     }
-    if (segments[2] === 'lectures' && segments[3]) crumbs.push({ label: 'הרצאה' });
+    if (segments[2] === 'lectures' && segments[3]) {
+      crumbs.push({ label: lectureName ?? segments[3] });
+    }
   } else if (segments[0] === 'stats') {
     crumbs.push({ label: 'סטטיסטיקות' });
   } else if (segments[0] === 'settings') {
@@ -44,7 +46,9 @@ export default function Topbar({ crumbs }: TopbarProps) {
   const pathname = usePathname();
   const segments = (pathname || '/').split('/').filter(Boolean);
   const classId = segments[0] === 'classes' ? segments[1] : undefined;
+  const lectureId = segments[2] === 'lectures' ? segments[3] : undefined;
   const [className, setClassName] = useState<string | null>(null);
+  const [lectureName, setLectureName] = useState<string | null>(null);
 
   useEffect(() => {
     if (!classId) {
@@ -64,7 +68,24 @@ export default function Topbar({ crumbs }: TopbarProps) {
     };
   }, [classId]);
 
-  const items = crumbs ?? deriveCrumbs(pathname || '/', className);
+  useEffect(() => {
+    if (!classId || !lectureId) {
+      setLectureName(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/status`))
+      .then((r) => r.json())
+      .then((data: { name?: string }) => {
+        if (!cancelled) setLectureName(data?.name ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [classId, lectureId]);
+
+  const items = crumbs ?? deriveCrumbs(pathname || '/', className, lectureName);
 
   return (
     <header className="topbar">

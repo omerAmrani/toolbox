@@ -1089,14 +1089,6 @@ input, select, textarea { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--line);
   padding-bottom: var(--gap);
 }
-.lec-h__eye {
-  font: var(--type-eyebrow);
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  margin-bottom: 14px;
-}
-.lec-h__eye a:hover { color: var(--ink); }
 .lec-h__title {
   font: 800 clamp(2rem, 3.6vw, 2.8rem)/1.05 var(--font-read);
   letter-spacing: -0.02em;

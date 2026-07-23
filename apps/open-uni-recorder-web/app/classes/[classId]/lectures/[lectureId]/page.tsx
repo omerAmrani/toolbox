@@ -7,8 +7,6 @@ import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { useToast } from '@/app/components/Toast';
 import { BackendSelect } from '@/app/components/BackendSelect';
-import { QASection } from '@/app/components/QASection';
-import type { QAState } from '@/app/components/QASection';
 import type { Backend } from '@/app/components/BackendSelect';
 import { Status, fmtDateLong } from '@/app/components/Status';
 
@@ -53,25 +51,19 @@ export default function LecturePage() {
   const { show: showToast, element: toastEl } = useToast();
 
   const [lecture, setLecture] = useState<LectureMeta | null>(null);
-  const [className, setClassName] = useState<string>('');
   const [lectures, setLectures] = useState<LectureListItem[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [summary, setSummary] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [history, setHistory] = useState<SummaryHistory>({ versions: [], currentSummary: null });
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [viewedSummaryId, setViewedSummaryId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'summary' | 'transcript'>('summary');
   const [transcript, setTranscript] = useState<string | null>(null);
-  const [qaOpen, setQaOpen] = useState(false);
-  const [qa, setQa] = useState<QAState | null>(null);
-  const [qaSubmitting, setQaSubmitting] = useState(false);
-  const [qaAnswers, setQaAnswers] = useState<string[]>([]);
   const [backend, setBackend] = useState<Backend>('claude');
   const [jobActive, setJobActive] = useState(false);
   const [currentJobType, setCurrentJobType] = useState<JobType | null>(null);
   const [actionLabel, setActionLabel] = useState('🔄 סכם מחדש');
   const [retranscribeLabel, setRetranscribeLabel] = useState('↻ תמלל מחדש');
-  const [retranscribeTestLabel, setRetranscribeTestLabel] = useState('🧪 תמלל 30 דקות');
   const [progressPct, setProgressPct] = useState(0);
   const streamBufferRef = useRef('');
 
@@ -90,17 +82,6 @@ export default function LecturePage() {
       setNotFound(true);
     }
   }, [classId, lectureId]);
-
-  const loadClassName = useCallback(async () => {
-    try {
-      const data: { name?: string } = await fetch(apiUrl(`/api/classes/${classId}`)).then((r) =>
-        r.json(),
-      );
-      if (data?.name) setClassName(data.name);
-    } catch {
-      /* ignore */
-    }
-  }, [classId]);
 
   const loadLectures = useCallback(async () => {
     try {
@@ -134,9 +115,8 @@ export default function LecturePage() {
 
   useEffect(() => {
     loadLecture();
-    loadClassName();
     loadLectures();
-  }, [loadLecture, loadClassName, loadLectures]);
+  }, [loadLecture, loadLectures]);
 
   useEffect(() => {
     if (!lecture) return;
@@ -176,9 +156,12 @@ export default function LecturePage() {
   }, [lectures, lectureId]);
 
   const toggleTranscript = async () => {
-    const next = !transcriptOpen;
-    setTranscriptOpen(next);
-    if (next && transcript === null) {
+    if (activeView === 'transcript') {
+      setActiveView('summary');
+      return;
+    }
+    setActiveView('transcript');
+    if (transcript === null) {
       try {
         const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/transcript`));
         setTranscript(r.ok ? await r.text() : 'אין תמלול זמין');
@@ -261,23 +244,22 @@ export default function LecturePage() {
       setJobActive(false);
       setCurrentJobType(null);
       setActionLabel('🔄 סכם מחדש');
+      setViewedSummaryId(null);
       loadLecture();
       loadHistory();
     }
   };
 
-  const runRetranscribe = async (test = false) => {
+  const runRetranscribe = async () => {
     if (jobActive) return;
     setJobActive(true);
     setCurrentJobType('transcribe');
-    const setLbl = test ? setRetranscribeTestLabel : setRetranscribeLabel;
-    const restoreLbl = test ? '🧪 תמלל 30 דקות' : '↻ תמלל מחדש';
     try {
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-        test ? { test: true } : {},
+        {},
         (ev) => {
-          if (ev.type === 'progress') setLbl(`⏳ ${String(ev.message)}`);
+          if (ev.type === 'progress') setRetranscribeLabel(`⏳ ${String(ev.message)}`);
           else if (ev.type === 'aborted') throw new Error('aborted');
           else if (ev.type === 'error') throw new Error(String(ev.message));
         },
@@ -289,7 +271,7 @@ export default function LecturePage() {
       } catch {
         /* ignore */
       }
-      setTranscriptOpen(true);
+      setActiveView('transcript');
       loadLecture();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'שגיאה';
@@ -299,7 +281,7 @@ export default function LecturePage() {
     } finally {
       setJobActive(false);
       setCurrentJobType(null);
-      setLbl(restoreLbl);
+      setRetranscribeLabel('↻ תמלל מחדש');
     }
   };
 
@@ -312,9 +294,10 @@ export default function LecturePage() {
     else showToast('שגיאה במחיקה', true);
   };
 
-  const copyToClipboard = async () => {
-    if (!summary) return;
-    await navigator.clipboard.writeText(summary);
+  const copyActive = async () => {
+    const text = activeView === 'transcript' ? transcript : summary;
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
     showToast('הועתק');
   };
 
@@ -328,109 +311,44 @@ export default function LecturePage() {
     URL.revokeObjectURL(a.href);
   };
 
-  const viewSummaryVersion = async (summaryId: string) => {
+  const viewSummary = async (summaryId: string) => {
+    if (summaryId === history.currentSummary) {
+      setViewedSummaryId(null);
+      await loadSummary();
+      setActiveView('summary');
+      return;
+    }
     try {
       const r = await fetch(
         apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}`),
       );
       if (!r.ok) throw new Error();
       setSummary(await r.text());
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setViewedSummaryId(summaryId);
+      setActiveView('summary');
     } catch {
       showToast('שגיאה בטעינת סיכום', true);
     }
   };
 
-  const setCurrentSummaryVersion = async (summaryId: string) => {
+  const deleteSummaryVersion = async () => {
+    const id = viewedSummaryId ?? history.currentSummary;
+    if (!id || !confirm('למחוק סיכום זה?')) return;
     try {
       await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}/current`),
-        { method: 'PUT' },
-      );
-      await viewSummaryVersion(summaryId);
-      await loadHistory();
-      showToast('הסיכום הוגדר כנוכחי');
-    } catch {
-      showToast('שגיאה', true);
-    }
-  };
-
-  const deleteSummaryVersion = async (summaryId: string) => {
-    if (!confirm('למחוק סיכום זה?')) return;
-    try {
-      await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}`),
+        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries/${id}`),
         { method: 'DELETE' },
       );
-      await loadHistory();
-      if (summaryId === history.currentSummary) {
-        const next: SummaryHistory = await fetch(
-          apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries`),
-        ).then((r) => r.json());
-        if (next.currentSummary) await viewSummaryVersion(next.currentSummary);
-        else setSummary('');
-      }
+      const next: SummaryHistory = await fetch(
+        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries`),
+      ).then((r) => r.json());
+      setHistory(next);
+      setViewedSummaryId(null);
+      if (next.currentSummary) await loadSummary();
+      else setSummary('');
       showToast('הסיכום נמחק');
     } catch {
       showToast('שגיאה במחיקה', true);
-    }
-  };
-
-  const loadQA = async () => {
-    try {
-      const data: QAState = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/qa`),
-      ).then((r) => r.json());
-      setQa(data);
-      const last = data.rounds[data.rounds.length - 1];
-      if (last && last.feedback.length === 0) {
-        setQaAnswers(new Array(last.questions.length).fill(''));
-      }
-    } catch {
-      showToast('שגיאה בטעינת Q&A', true);
-    }
-  };
-
-  const toggleQA = () => {
-    const next = !qaOpen;
-    setQaOpen(next);
-    if (next && qa === null) loadQA();
-  };
-
-  const startNewQARound = async () => {
-    try {
-      const data: { questions?: string[]; error?: string; roundIndex?: number } = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/qa/generate`),
-        { method: 'POST' },
-      ).then((r) => r.json());
-      if (data.error) throw new Error(data.error);
-      await loadQA();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'שגיאה';
-      showToast(msg, true);
-    }
-  };
-
-  const submitAnswers = async () => {
-    if (!qa) return;
-    const lastIdx = qa.rounds.length - 1;
-    setQaSubmitting(true);
-    try {
-      const data: { error?: string } = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/qa/answer`),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roundIndex: lastIdx, answers: qaAnswers }),
-        },
-      ).then((r) => r.json());
-      if (data.error) throw new Error(data.error);
-      await loadQA();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'שגיאה';
-      showToast(msg, true);
-    } finally {
-      setQaSubmitting(false);
     }
   };
 
@@ -454,18 +372,6 @@ export default function LecturePage() {
 
       <div className="lec-h">
         <div>
-          <div className="lec-h__eye">
-            <a
-              href={`/classes/${classId}`}
-              onClick={(e) => {
-                e.preventDefault();
-                router.push(`/classes/${classId}`);
-              }}
-              style={{ color: 'inherit' }}
-            >
-              {className || 'קורס'}
-            </a>
-          </div>
           <h1 className="lec-h__title">{lecture?.name || 'טוען...'}</h1>
           <div className="lec-h__meta">
             {headerDate && <span>{headerDate}</span>}
@@ -484,15 +390,6 @@ export default function LecturePage() {
           </div>
         </div>
         <div className="lec-h__actions">
-          {prevLecture && (
-            <button
-              className="btn btn--ghost btn--sm"
-              onClick={() => router.push(`/classes/${classId}/lectures/${prevLecture.id}`)}
-              title={prevLecture.name}
-            >
-              ← הקודמת
-            </button>
-          )}
           {nextLecture && (
             <button
               className="btn btn--ghost btn--sm"
@@ -502,12 +399,15 @@ export default function LecturePage() {
               הבאה →
             </button>
           )}
-          <button className="btn btn--ghost btn--sm" onClick={toggleTranscript}>
-            📜 תמלול
-          </button>
-          <button className="btn btn--ghost btn--sm" onClick={() => setHistoryOpen((o) => !o)}>
-            🕓 גרסאות {history.versions.length ? `(${history.versions.length})` : ''}
-          </button>
+          {prevLecture && (
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => router.push(`/classes/${classId}/lectures/${prevLecture.id}`)}
+              title={prevLecture.name}
+            >
+              ← הקודמת
+            </button>
+          )}
           <button className="btn btn--ghost btn--sm" onClick={downloadMd} disabled={!summary}>
             ↗ ייצוא
           </button>
@@ -516,141 +416,83 @@ export default function LecturePage() {
 
       <div className="lec-grid lec-grid--split">
         <div>
-          {summary ? (
-            <>
-              <div className="summary-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                {streaming && (
-                  <span className="streaming-badge">
-                    <span className="dot" /> מסכם...
-                  </span>
-                )}
-                <div style={{ marginInlineStart: 'auto', display: 'flex', gap: 8 }}>
-                  <button className="btn btn--ghost btn--sm" onClick={copyToClipboard}>
-                    העתק
-                  </button>
-                  <button className="btn btn--ghost btn--sm" onClick={downloadMd}>
-                    הורד .md
-                  </button>
-                </div>
-              </div>
-              <div
-                className="summary"
-                data-testid="summary-body"
-                dangerouslySetInnerHTML={{ __html: summaryHtml }}
-              />
-            </>
-          ) : (
-            <div className="summary" style={{ textAlign: 'center', padding: '40px 0' }}>
-              <p style={{ color: 'var(--muted)', marginBottom: 16 }}>אין סיכום עדיין</p>
-              <button className="btn" data-testid="summarize-btn" onClick={runSummarize}>
-                ▶ סכם עכשיו
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                className="select-field"
+                value={viewedSummaryId ?? history.currentSummary ?? ''}
+                onChange={(e) => e.target.value && viewSummary(e.target.value)}
+              >
+                {history.versions.map((v, i) => {
+                  const label = v.backend === 'claude' ? 'Claude' : v.backend === 'gemini' ? 'Gemini' : 'Other';
+                  const num = history.versions.length - i;
+                  return (
+                    <option key={v.id} value={v.id}>
+                      {label} #{num}
+                    </option>
+                  );
+                })}
+              </select>
+              <button
+                className={`btn btn--sm ${activeView === 'transcript' ? '' : 'btn--ghost'}`}
+                onClick={toggleTranscript}
+              >
+                תמלול
               </button>
             </div>
-          )}
-
-          {historyOpen && (
-            <section className="lec-aside__meta" style={{ marginTop: 24 }}>
-              <div className="lec-aside__title">היסטוריית סיכומים</div>
-              {history.versions.length === 0 ? (
-                <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-                  אין סיכומים שמורים
-                </div>
-              ) : (
-                history.versions.map((v) => {
-                  const isCurrent = v.id === history.currentSummary;
-                  const date = new Date(v.date).toLocaleString('he-IL');
-                  return (
-                    <div
-                      key={v.id}
-                      style={{
-                        display: 'flex',
-                        gap: 8,
-                        alignItems: 'center',
-                        padding: '10px 0',
-                        borderTop: '1px dashed var(--line-2)',
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.85rem' }}>
-                          {isCurrent && (
-                            <span
-                              className="status status--summarized"
-                              style={{ fontSize: '0.7rem', marginInlineEnd: 6 }}
-                            >
-                              נוכחי
-                            </span>
-                          )}
-                          {date}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
-                          {v.backend}
-                          {v.model ? ` · ${v.model}` : ''}
-                        </div>
-                      </div>
-                      <button className="btn btn--ghost btn--sm" onClick={() => viewSummaryVersion(v.id)}>
-                        הצג
-                      </button>
-                      {!isCurrent && (
-                        <button
-                          className="btn btn--ghost btn--sm"
-                          onClick={() => setCurrentSummaryVersion(v.id)}
-                        >
-                          הגדר כנוכחי
-                        </button>
-                      )}
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => deleteSummaryVersion(v.id)}
-                      >
-                        מחק
-                      </button>
-                    </div>
-                  );
-                })
-              )}
-            </section>
-          )}
-
-          {transcriptOpen && (
-            <section className="lec-aside__meta" style={{ marginTop: 24 }}>
-              <div className="lec-aside__title">תמלול מלא</div>
-              <div
-                style={{
-                  whiteSpace: 'pre-wrap',
-                  fontSize: '0.85rem',
-                  color: 'var(--muted)',
-                  maxHeight: 400,
-                  overflow: 'auto',
-                }}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn--ghost btn--sm"
+                onClick={copyActive}
+                disabled={!(activeView === 'transcript' ? transcript : summary)}
               >
-                {transcript ?? 'טוען תמלול...'}
-              </div>
-            </section>
-          )}
+                העתק
+              </button>
+              {activeView === 'summary' && summary && (
+                <button className="btn btn--ghost btn--sm" onClick={deleteSummaryVersion}>
+                  מחק
+                </button>
+              )}
+            </div>
+          </div>
 
-          {lecture?.currentSummary && (
-            <section className="qa qa--inline" style={{ marginTop: 24 }}>
-              <div className="qa__h">
-                <h2 className="qa__title">🧠 שאלות ותשובות</h2>
-                <button className="btn btn--ghost btn--sm" onClick={toggleQA}>
-                  {qaOpen ? 'סגור' : 'פתח'}
+          {activeView === 'summary' &&
+            (summary ? (
+              <>
+                {streaming && (
+                  <div className="summary-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    <span className="streaming-badge">
+                      <span className="dot" /> מסכם...
+                    </span>
+                  </div>
+                )}
+                <div
+                  className="summary"
+                  data-testid="summary-body"
+                  dangerouslySetInnerHTML={{ __html: summaryHtml }}
+                />
+              </>
+            ) : (
+              <div className="summary" style={{ textAlign: 'center', padding: '40px 0' }}>
+                <p style={{ color: 'var(--muted)', marginBottom: 16 }}>אין סיכום עדיין</p>
+                <button className="btn" data-testid="summarize-btn" onClick={runSummarize}>
+                  ▶ סכם עכשיו
                 </button>
               </div>
-              {qaOpen && (
-                <QASection
-                  qa={qa}
-                  answers={qaAnswers}
-                  onAnswerChange={(i, v) => {
-                    const next = [...qaAnswers];
-                    next[i] = v;
-                    setQaAnswers(next);
-                  }}
-                  onStartNewRound={startNewQARound}
-                  onSubmit={submitAnswers}
-                  submitting={qaSubmitting}
-                />
-              )}
-            </section>
+            ))}
+
+          {activeView === 'transcript' && (
+            <div
+              style={{
+                whiteSpace: 'pre-wrap',
+                fontSize: '0.85rem',
+                color: 'var(--muted)',
+                maxHeight: 400,
+                overflow: 'auto',
+              }}
+            >
+              {transcript ?? 'טוען תמלול...'}
+            </div>
           )}
         </div>
 
@@ -659,35 +501,9 @@ export default function LecturePage() {
             <div className="lec-aside__title">פרטי ההרצאה</div>
             <dl>
               <div className="lec-aside__row">
-                <dt>תאריך</dt>
-                <dd>{headerDate || '—'}</dd>
-              </div>
-              <div className="lec-aside__row">
-                <dt>תמלול</dt>
-                <dd>{lecture?.whisperBackend || '—'}</dd>
-              </div>
-              <div className="lec-aside__row">
                 <dt>סיכום</dt>
-                <dd>
-                  {lecture?.summarizeBackend
-                    ? `${lecture.summarizeBackend}${lecture.summarizeModel ? ` · ${lecture.summarizeModel}` : ''}`
-                    : '—'}
-                </dd>
+                <dd>{lecture?.summarizeModel || '—'}</dd>
               </div>
-              <div className="lec-aside__row">
-                <dt>סוכם בתאריך</dt>
-                <dd>
-                  {lecture?.summarizedAt
-                    ? new Date(lecture.summarizedAt).toLocaleString('he-IL')
-                    : '—'}
-                </dd>
-              </div>
-              {summary && (
-                <div className="lec-aside__row">
-                  <dt>זמן קריאה</dt>
-                  <dd>~{readingMinutes} דקות</dd>
-                </div>
-              )}
             </dl>
           </div>
 
@@ -715,18 +531,10 @@ export default function LecturePage() {
               <button
                 className="btn btn--ghost btn--sm"
                 style={{ width: '100%', justifyContent: 'center' }}
-                onClick={() => runRetranscribe(false)}
+                onClick={runRetranscribe}
                 disabled={jobActive}
               >
                 {retranscribeLabel}
-              </button>
-              <button
-                className="btn btn--ghost btn--sm"
-                style={{ width: '100%', justifyContent: 'center' }}
-                onClick={() => runRetranscribe(true)}
-                disabled={jobActive}
-              >
-                {retranscribeTestLabel}
               </button>
               {jobActive && (
                 <button
@@ -742,7 +550,6 @@ export default function LecturePage() {
                   ⏹ עצור
                 </button>
               )}
-              <hr style={{ border: 0, borderTop: '1px dashed var(--line-2)', margin: '4px 0' }} />
               <button
                 className="btn btn--ghost btn--sm"
                 style={{ width: '100%', justifyContent: 'center', color: 'var(--st-error)' }}

@@ -43,11 +43,10 @@ Also: `failed`, `aborted`, `skipped`, `error`. Retry resets `failed` → `pendin
 
 **File routes:**
 - `GET .../transcript` — raw `transcript.txt`
-- `GET .../summary` — current summary content
+- `GET .../summary` — latest summary version's content (`lectures.currentSummary` always points at the newest surviving version — there's no manual "set current" anymore)
 - `GET .../summaries` — list of all summary versions `{ versions[], currentSummary }`
-- `GET .../summaries/:summaryId` — specific version content
-- `PUT .../summaries/:summaryId/current` — set active version
-- `DELETE .../summaries/:summaryId` — delete a version
+- `GET .../summaries/:summaryId` — specific version content (read-only, does not change which version is latest)
+- `DELETE .../summaries/:summaryId` — delete a version; if it was the latest, the next-newest remaining version becomes latest
 
 ## Web
 

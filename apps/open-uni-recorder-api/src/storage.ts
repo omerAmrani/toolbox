@@ -169,13 +169,6 @@ export function getCurrentSummaryContent(classId: string, lectureId: string): st
   return getSummaryContent(classId, lectureId, lecture.currentSummary);
 }
 
-export function setCurrentSummary(classId: string, lectureId: string, summaryId: string): boolean {
-  const p = path.join(summariesDirPath(classId, lectureId), `${summaryId}.md`);
-  if (!existsSync(p)) return false;
-  db.prepare('UPDATE lectures SET currentSummary = ? WHERE id = ?').run(summaryId, lectureId);
-  return true;
-}
-
 export function deleteSummaryVersion(classId: string, lectureId: string, summaryId: string): boolean {
   const p = path.join(summariesDirPath(classId, lectureId), `${summaryId}.md`);
   if (!existsSync(p)) return false;

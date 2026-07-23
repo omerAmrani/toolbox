@@ -331,24 +331,19 @@ export default function ClassDetailPage() {
                 <article
                   className="lec-card"
                   data-current={current ? '' : undefined}
+                  onClick={() => router.push(`/classes/${classId}/lectures/${l.id}`)}
+                  style={{ cursor: 'pointer' }}
                 >
                   <div className="lec-card__num">{String(l.n).padStart(2, '0')}</div>
                   <div>
-                    <a
-                      className="lecture-link"
-                      href={`/classes/${classId}/lectures/${l.id}`}
-                      onClick={(e) => { e.preventDefault(); router.push(`/classes/${classId}/lectures/${l.id}`); }}
-                      style={{ color: 'inherit', textDecoration: 'none' }}
-                    >
-                      <div className="lec-card__title">{l.name}</div>
-                    </a>
+                    <div className="lec-card__title">{l.name}</div>
                     <div className="lec-card__meta">
                       <span>{fmtDateLong(l.lectureDate)}</span>
                       <span style={{ opacity: 0.4 }}>·</span>
                       <Status s={l.status} />
                     </div>
                   </div>
-                  <div className="lec-card__actions">
+                  <div className="lec-card__actions" onClick={(e) => e.stopPropagation()}>
                     {l.status === 'pending' && (
                       <button
                         className="btn btn--sm"

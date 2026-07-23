@@ -21,5 +21,5 @@ Downloads a lecture video from OPAL and transcribes it to text using Whisper.
 ## Web
 
 - Class detail page — "סכם" button runs transcribe + summarize in sequence via SSE
-- Lecture detail page — "תמלל מחדש" re-runs transcription; "🧪 תמלל 30 דקות" runs with `test: true`
+- Lecture detail page — "תמלל מחדש" re-runs full transcription
 - See [lectures.md](../../open-uni-recorder-web/docs/lectures.md)

@@ -14,7 +14,7 @@ Never hardcode `localhost:3001` — always use `apiUrl()`.
 
 - `/classes` — list all classes, create/delete
 - `/classes/[classId]` — class detail, lecture list, run pipeline, job status polling
-- `/classes/[classId]/lectures/[lectureId]` — lecture detail, transcribe/summarize (SSE), Q&A, summary versions
+- `/classes/[classId]/lectures/[lectureId]` — lecture detail, transcribe/summarize (SSE), summary versions
 - `/settings` — AI backend selection, health checks
 
 ## SSE consumption
@@ -27,7 +27,7 @@ Transcribe and summarize endpoints stream `text/event-stream`. Event shapes:
 
 ## Components
 
-Local to `app/components/`: `NavBar`, `PageHeader`, `Modal`, `Toast`, `StatusBadge`, `BackendSelect`, `EmptyState`, `QASection`. Status label/color helpers live in `lib/status.ts`.
+Local to `app/components/`: `NavBar`, `PageHeader`, `Modal`, `Toast`, `StatusBadge`, `BackendSelect`, `EmptyState`. Status label/color helpers live in `lib/status.ts`.
 
 ## Before implementing a feature
 

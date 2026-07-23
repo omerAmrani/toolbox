@@ -157,15 +157,31 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const semesterOptions = useMemo(() => {
+    const seen = new Map<string, { key: string; label: string; year: number; semester: string }>();
+    for (const s of syncSections) {
+      if (!s.semester || !s.year) continue;
+      const key = `${s.semester}-${s.year}`;
+      if (!seen.has(key)) seen.set(key, { key, label: `${SEMESTER_HE[s.semester] || s.semester} ${s.year}`, year: s.year, semester: s.semester });
+    }
+    return [...seen.values()].sort((a, b) => {
+      if (b.year !== a.year) return b.year - a.year;
+      return (SEMESTER_ORDER[b.semester] ?? 0) - (SEMESTER_ORDER[a.semester] ?? 0);
+    });
+  }, [syncSections]);
+
   const loadQueue = useCallback(async () => {
+    const selected = semesterOptions.find((o) => o.key === selectedSemesterKey);
+    const qs = selected ? `?semester=${selected.semester}&year=${selected.year}` : '';
+    const queueUrl = apiUrl(`/api/classes/queue${qs}`);
     try {
-      const data: QueueData = await fetch(apiUrl('/api/classes/queue')).then((r) => r.json());
+      const data: QueueData = await fetch(queueUrl).then((r) => r.json());
       setQueue(data);
       const anyProcessing = data.lectures.some((l) => l.status === 'processing');
       if (anyProcessing && !queueRefreshTimer.current) {
         queueRefreshTimer.current = setInterval(async () => {
           try {
-            const d: QueueData = await fetch(apiUrl('/api/classes/queue')).then((r) => r.json());
+            const d: QueueData = await fetch(queueUrl).then((r) => r.json());
             setQueue(d);
             if (!d.lectures.some((l) => l.status === 'processing')) {
               if (queueRefreshTimer.current) { clearInterval(queueRefreshTimer.current); queueRefreshTimer.current = null; }
@@ -174,7 +190,7 @@ export default function SettingsPage() {
         }, 3000);
       }
     } catch { /* ignore */ }
-  }, []);
+  }, [semesterOptions, selectedSemesterKey]);
 
   const loadCronLog = useCallback(async () => {
     try {
@@ -197,19 +213,6 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
 
-  const semesterOptions = useMemo(() => {
-    const seen = new Map<string, { key: string; label: string; year: number; semester: string }>();
-    for (const s of syncSections) {
-      if (!s.semester || !s.year) continue;
-      const key = `${s.semester}-${s.year}`;
-      if (!seen.has(key)) seen.set(key, { key, label: `${SEMESTER_HE[s.semester] || s.semester} ${s.year}`, year: s.year, semester: s.semester });
-    }
-    return [...seen.values()].sort((a, b) => {
-      if (b.year !== a.year) return b.year - a.year;
-      return (SEMESTER_ORDER[b.semester] ?? 0) - (SEMESTER_ORDER[a.semester] ?? 0);
-    });
-  }, [syncSections]);
-
   useEffect(() => {
     if (semesterOptions.length === 0) return;
     if (semesterOptions.some((o) => o.key === selectedSemesterKey)) return;
@@ -227,13 +230,16 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadDataDir();
-    loadQueue();
     loadCronLog();
     initSyncPanel();
+  }, [loadDataDir, loadCronLog, initSyncPanel]);
+
+  useEffect(() => {
+    loadQueue();
     return () => {
       if (queueRefreshTimer.current) { clearInterval(queueRefreshTimer.current); queueRefreshTimer.current = null; }
     };
-  }, [loadDataDir, loadQueue, loadCronLog, initSyncPanel]);
+  }, [loadQueue]);
 
   const pickDataDir = async () => {
     setPickingDir(true);

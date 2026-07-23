@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Put, Param, Body, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Res } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { EventEmitter } from 'events';
@@ -346,12 +346,6 @@ export class LecturesController {
     const content = this.storage.getSummaryContent(classId, lectureId, summaryId);
     if (content === null) return res.status(404).json({ error: 'Not found' });
     res.type('text/plain').send(content);
-  }
-
-  @Put(':classId/lectures/:lectureId/summaries/:summaryId/current')
-  setCurrentSummary(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Param('summaryId') summaryId: string, @Res() res: Response) {
-    if (!this.storage.setCurrentSummary(classId, lectureId, summaryId)) return res.status(404).json({ error: 'Not found' });
-    res.json({ ok: true });
   }
 
   @Delete(':classId/lectures/:lectureId/summaries/:summaryId')

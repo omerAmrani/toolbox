@@ -28,7 +28,7 @@ test.describe('Classes page', () => {
     await expect(page.locator('h1')).toContainText('E2E Test Class');
 
     const classId = page.url().split('/classes/')[1];
-    createdClassId = classId;
+    createdClassId = classId ?? null;
   });
 
   test('shows the class card in the list after creation', async ({ page, request }) => {

@@ -508,36 +508,6 @@ describe('LecturesController', () => {
     });
   });
 
-  describe('PUT .../summaries/:summaryId/current', () => {
-    it('returns 404 for unknown summary id', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-
-      const res = await request(app.getHttpServer())
-        .put(`/api/classes/${classId}/lectures/${created.body.id}/summaries/nonexistent/current`);
-      expect(res.status).toBe(404);
-    });
-
-    it('sets a summary version as current', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-      const id = created.body.id;
-
-      const targetId = storage.saveSummaryVersion(classId, id, 'v1 content', 'gemini');
-
-      const res = await request(app.getHttpServer())
-        .put(`/api/classes/${classId}/lectures/${id}/summaries/${targetId}/current`);
-      expect(res.status).toBe(200);
-      expect(res.body.ok).toBe(true);
-
-      const summary = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${id}/summary`);
-      expect(summary.text).toBe('v1 content');
-    });
-  });
-
   describe('DELETE .../summaries/:summaryId', () => {
     it('returns 404 for unknown summary id', async () => {
       const created = await request(app.getHttpServer())

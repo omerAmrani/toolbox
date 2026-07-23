@@ -85,6 +85,21 @@ describe('PipelineController', () => {
       expect(res.body.lectures).toHaveLength(2);
       expect(res.body.lectures[0]).toMatchObject({ className: 'Math', status: 'pending' });
     });
+
+    it('only includes lectures from classes matching the given semester and year', async () => {
+      const clsA = storage.createClass({ name: 'Semester A Class', semester: 'A', year: 2025 });
+      storage.createLecture(clsA.id, { name: 'L1', url: 'https://example.com', status: 'pending' });
+      const clsB = storage.createClass({ name: 'Semester B Class', semester: 'B', year: 2025 });
+      storage.createLecture(clsB.id, { name: 'L2', url: 'https://example.com', status: 'pending' });
+
+      const res = await request(app.getHttpServer())
+        .get('/api/classes/queue')
+        .query({ semester: 'A', year: 2025 });
+
+      expect(res.status).toBe(200);
+      expect(res.body.lectures).toHaveLength(1);
+      expect(res.body.lectures[0]).toMatchObject({ className: 'Semester A Class' });
+    });
   });
 
   describe('POST /api/classes/run-queue', () => {
