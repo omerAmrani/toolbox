@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { marked } from 'marked';
-import { apiUrl } from '@/lib/api';
+import { apiUrl, deleteResource } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { useToast } from '@/app/components/Toast';
 import { BackendSelect } from '@/app/components/BackendSelect';
@@ -286,11 +286,12 @@ export default function LecturePage() {
   };
 
   const deleteLecture = async () => {
-    if (!confirm('למחוק את ההרצאה וכל הקבצים שלה?')) return;
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}`), {
-      method: 'DELETE',
-    });
-    if (r.ok) router.push(`/classes/${classId}`);
+    const ok = await deleteResource(
+      `/api/classes/${classId}/lectures/${lectureId}`,
+      'למחוק את ההרצאה וכל הקבצים שלה?',
+    );
+    if (ok === null) return;
+    if (ok) router.push(`/classes/${classId}`);
     else showToast('שגיאה במחיקה', true);
   };
 
@@ -333,12 +334,13 @@ export default function LecturePage() {
 
   const deleteSummaryVersion = async () => {
     const id = viewedSummaryId ?? history.currentSummary;
-    if (!id || !confirm('למחוק סיכום זה?')) return;
+    if (!id) return;
+    const ok = await deleteResource(
+      `/api/classes/${classId}/lectures/${lectureId}/summaries/${id}`,
+      'למחוק סיכום זה?',
+    );
+    if (ok === null) return;
     try {
-      await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries/${id}`),
-        { method: 'DELETE' },
-      );
       const next: SummaryHistory = await fetch(
         apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries`),
       ).then((r) => r.json());

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiUrl } from '@/lib/api';
+import { apiUrl, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
 import NewCourseModal from '@/app/components/NewCourseModal';
@@ -38,8 +38,8 @@ export default function ClassesPage() {
   };
 
   const deleteClass = async (id: string) => {
-    if (!confirm('למחוק את הקורס וכל ההרצאות שלו?')) return;
-    await fetch(apiUrl(`/api/classes/${id}`), { method: 'DELETE' });
+    const ok = await deleteResource(`/api/classes/${id}`, 'למחוק את הקורס וכל ההרצאות שלו?');
+    if (ok === null) return;
     loadClasses();
   };
 

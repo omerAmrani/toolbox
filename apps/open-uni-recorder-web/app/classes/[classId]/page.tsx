@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { apiUrl } from '@/lib/api';
+import { apiUrl, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { streamSSE } from '@/lib/sse';
 import { useToast } from '@/app/components/Toast';
@@ -122,9 +122,9 @@ export default function ClassDetailPage() {
   };
 
   const deleteClass = async () => {
-    if (!confirm('למחוק את הקורס וכל ההרצאות שלו?')) return;
-    const r = await fetch(apiUrl(`/api/classes/${classId}`), { method: 'DELETE' });
-    if (r.ok) {
+    const ok = await deleteResource(`/api/classes/${classId}`, 'למחוק את הקורס וכל ההרצאות שלו?');
+    if (ok === null) return;
+    if (ok) {
       showToast('הקורס נמחק');
       router.push('/classes');
     } else {
@@ -220,12 +220,9 @@ export default function ClassDetailPage() {
   };
 
   const deleteLecture = async (lectureId: string) => {
-    if (!confirm('למחוק את ההרצאה?')) return;
-    const r = await fetch(
-      apiUrl(`/api/classes/${classId}/lectures/${lectureId}`),
-      { method: 'DELETE' },
-    );
-    if (r.ok) {
+    const ok = await deleteResource(`/api/classes/${classId}/lectures/${lectureId}`, 'למחוק את ההרצאה?');
+    if (ok === null) return;
+    if (ok) {
       showToast('נמחק');
       loadLectures();
     } else {
