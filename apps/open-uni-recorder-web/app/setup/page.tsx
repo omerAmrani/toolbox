@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/app/components/Button';
 
 interface University {
   id: string;
@@ -92,9 +93,9 @@ export default function SetupPage() {
                 <span />
                 <span />
               </div>
-              <button className="btn" disabled={!uniId} style={{ opacity: uniId ? 1 : 0.4 }} onClick={() => setStep(1)}>
+              <Button variant="primary" size="md" disabled={!uniId} onClick={() => setStep(1)}>
                 המשך ←
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -140,18 +141,18 @@ export default function SetupPage() {
                 <span />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn--ghost btn--sm" onClick={() => { setStep(0); setConnected(false); }}>→ חזור</button>
+                <Button onClick={() => { setStep(0); setConnected(false); }}>→ חזור</Button>
                 {!connected ? (
-                  <button
-                    className="btn"
+                  <Button
+                    variant="primary"
+                    size="md"
                     disabled={!username || !password || testing}
-                    style={{ opacity: !username || !password || testing ? 0.4 : 1 }}
                     onClick={testConnection}
                   >
                     {testing ? <><span className="spin" /> בודק חיבור...</> : 'התחבר'}
-                  </button>
+                  </Button>
                 ) : (
-                  <button className="btn" onClick={() => setStep(2)}>המשך ←</button>
+                  <Button variant="primary" size="md" onClick={() => setStep(2)}>המשך ←</Button>
                 )}
               </div>
             </div>
@@ -180,9 +181,9 @@ export default function SetupPage() {
                 <span className="is-done" />
                 <span className="is-active" />
               </div>
-              <button className="btn btn--accent" onClick={() => router.push('/classes')}>
+              <Button variant="accent" size="md" onClick={() => router.push('/classes')}>
                 קח אותי לקורסים ←
-              </button>
+              </Button>
             </div>
           </div>
         )}

@@ -144,11 +144,11 @@ input, select, textarea { font: inherit; color: inherit; }
 ::selection { background: var(--accent); color: var(--accent-on); }
 
 .select-field {
-  padding: 8px 12px;
+  padding: 6px 11px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  font: 0.85rem/1.2 var(--font-ui);
+  border-radius: 7px;
+  font: 0.8rem/1.2 var(--font-ui);
   color: var(--ink);
   cursor: pointer;
   outline: none;
@@ -405,9 +405,16 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .btn--accent:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn--danger { background: var(--danger); color: white; border-color: var(--danger); }
+.btn--danger-ghost { background: transparent; color: var(--danger); border: 1px solid var(--line-2); }
+.btn--danger-ghost:hover { background: var(--danger); color: white; }
 .btn--sm { padding: 6px 11px; font-size: 0.8rem; border-radius: 7px; }
+.btn--xs { padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; }
+.btn--block { width: 100%; justify-content: center; }
 .btn--icon {
   padding: 7px; aspect-ratio: 1; justify-content: center;
+}
+.btn:disabled, .btn[disabled] {
+  opacity: 0.45; cursor: not-allowed; transform: none;
 }
 
 .chip {

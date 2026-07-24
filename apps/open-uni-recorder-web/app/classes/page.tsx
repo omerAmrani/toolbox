@@ -6,6 +6,7 @@ import { apiUrl, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
 import NewCourseModal from '@/app/components/NewCourseModal';
+import { Button } from '@/app/components/Button';
 
 interface ClassRow {
   id: string;
@@ -116,15 +117,16 @@ export default function ClassesPage() {
                 <div className="class-card__bar" />
                 <div className="class-card__top">
                   <div className="class-card__icon">{classIcon(c.name)}</div>
-                  <button
-                    className="btn btn--ghost btn--sm"
+                  <Button
+                    variant="danger-ghost"
+                    icon
                     data-testid="class-delete-btn"
                     onClick={(e) => { e.stopPropagation(); deleteClass(c.id); }}
                     title="מחק קורס"
                     style={{ marginInlineStart: 'auto' }}
                   >
                     🗑
-                  </button>
+                  </Button>
                 </div>
                 <h3 className="class-card__title">{c.name}</h3>
                 {meta && <div className="class-card__meta">{meta}</div>}

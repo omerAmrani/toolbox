@@ -8,6 +8,7 @@ import { streamSSE } from '@/lib/sse';
 import { useToast } from '@/app/components/Toast';
 import { Status, fmtDateLong } from '@/app/components/Status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
+import { Button } from '@/app/components/Button';
 
 interface ClassInfo {
   id: string;
@@ -286,21 +287,13 @@ export default function ClassDetailPage() {
               }}
             />
           ) : (
-            <button
-              className="btn btn--ghost btn--sm"
-              onClick={() => setEditingUrl(true)}
-              title="ערוך קישור OPAL"
-            >
+            <Button onClick={() => setEditingUrl(true)} title="ערוך קישור OPAL">
               ✎ קישור
-            </button>
+            </Button>
           )}
-          <button
-            className="btn btn--ghost btn--sm"
-            onClick={deleteClass}
-            title="מחק קורס"
-          >
+          <Button variant="danger-ghost" icon onClick={deleteClass} title="מחק קורס">
             🗑
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -342,50 +335,39 @@ export default function ClassDetailPage() {
                   </div>
                   <div className="lec-card__actions" onClick={(e) => e.stopPropagation()}>
                     {l.status === 'pending' && (
-                      <button
-                        className="btn btn--sm"
+                      <Button
+                        variant="primary"
                         data-testid="run-pipeline-btn"
                         onClick={() => runPipeline(l.id)}
                         title="הפעל pipeline"
                       >
                         ▶ הפעל
-                      </button>
+                      </Button>
                     )}
                     {l.status === 'transcribed' && (
-                      <button
-                        className="btn btn--sm"
-                        onClick={() => runSummarize(l.id)}
-                        title="סכם"
-                      >
+                      <Button variant="primary" onClick={() => runSummarize(l.id)} title="סכם">
                         ▶ סכם
-                      </button>
+                      </Button>
                     )}
                     {failed && (
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => retryLecture(l.id)}
-                        title="נסה שנית"
-                      >
+                      <Button onClick={() => retryLecture(l.id)} title="נסה שנית">
                         ↻ נסה שנית
-                      </button>
+                      </Button>
                     )}
                     {l.status === 'skipped' && (
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => skipLecture(l.id, l.status)}
-                        title="בטל דילוג"
-                      >
+                      <Button onClick={() => skipLecture(l.id, l.status)} title="בטל דילוג">
                         ↺ בטל דילוג
-                      </button>
+                      </Button>
                     )}
-                    <button
-                      className="btn btn--ghost btn--sm"
+                    <Button
+                      variant="danger-ghost"
+                      icon
                       data-testid="delete-lecture-btn"
                       onClick={() => deleteLecture(l.id)}
                       title="מחק"
                     >
                       🗑
-                    </button>
+                    </Button>
                   </div>
                   {showProgress && (
                     <div className="lec-card__progress">

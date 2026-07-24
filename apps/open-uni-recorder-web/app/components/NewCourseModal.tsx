@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { apiUrl } from '@/lib/api';
+import { Button } from '@/app/components/Button';
 
 interface Props {
   open: boolean;
@@ -131,12 +132,12 @@ export default function NewCourseModal({ open, onClose, onCreated }: Props) {
         )}
 
         <div className="modal__actions">
-          <button className="btn btn--ghost btn--sm" onClick={onClose} disabled={submitting}>
+          <Button onClick={onClose} disabled={submitting}>
             ביטול
-          </button>
-          <button className="btn" data-testid="class-submit-btn" onClick={submit} disabled={submitting}>
+          </Button>
+          <Button variant="primary" size="md" data-testid="class-submit-btn" onClick={submit} disabled={submitting}>
             {submitting ? '...' : 'צור קורס'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

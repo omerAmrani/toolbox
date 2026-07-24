@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/Toast';
 import { BackendSelect } from '@/app/components/BackendSelect';
 import type { Backend } from '@/app/components/BackendSelect';
 import { Status, fmtDateLong } from '@/app/components/Status';
+import { Button } from '@/app/components/Button';
 
 interface LectureMeta {
   id: string;
@@ -393,22 +394,20 @@ export default function LecturePage() {
         </div>
         <div className="lec-h__actions">
           {nextLecture && (
-            <button
-              className="btn btn--ghost btn--sm"
+            <Button
               onClick={() => router.push(`/classes/${classId}/lectures/${nextLecture.id}`)}
               title={nextLecture.name}
             >
               הבאה →
-            </button>
+            </Button>
           )}
           {prevLecture && (
-            <button
-              className="btn btn--ghost btn--sm"
+            <Button
               onClick={() => router.push(`/classes/${classId}/lectures/${prevLecture.id}`)}
               title={prevLecture.name}
             >
               ← הקודמת
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -432,36 +431,32 @@ export default function LecturePage() {
                   );
                 })}
               </select>
-              <button
-                className={`btn btn--sm ${activeView === 'transcript' ? '' : 'btn--ghost'}`}
+              <Button
+                variant={activeView === 'transcript' ? 'primary' : 'ghost'}
+                aria-pressed={activeView === 'transcript'}
                 onClick={toggleTranscript}
               >
                 תמלול
-              </button>
+              </Button>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {activeView === 'summary' && (
-                <button
-                  className="btn btn--ghost btn--sm"
-                  onClick={downloadMd}
-                  disabled={!summary}
-                  title="ייצוא"
-                >
+                <Button icon onClick={downloadMd} disabled={!summary} title="ייצוא">
                   ⬇
-                </button>
+                </Button>
               )}
-              <button
-                className="btn btn--ghost btn--sm"
+              <Button
+                icon
                 onClick={copyActive}
                 disabled={!(activeView === 'transcript' ? transcript : summary)}
                 title="העתק"
               >
                 📋
-              </button>
+              </Button>
               {activeView === 'summary' && summary && (
-                <button className="btn btn--ghost btn--sm" onClick={deleteSummaryVersion} title="מחק">
+                <Button variant="danger-ghost" icon onClick={deleteSummaryVersion} title="מחק">
                   🗑
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -485,9 +480,9 @@ export default function LecturePage() {
             ) : (
               <div className="summary" style={{ textAlign: 'center', padding: '40px 0' }}>
                 <p style={{ color: 'var(--muted)', marginBottom: 16 }}>אין סיכום עדיין</p>
-                <button className="btn" data-testid="summarize-btn" onClick={runSummarize}>
+                <Button variant="primary" size="md" data-testid="summarize-btn" onClick={runSummarize}>
                   ▶ סכם עכשיו
-                </button>
+                </Button>
               </div>
             ))}
 
@@ -534,43 +529,20 @@ export default function LecturePage() {
                 onChange={setBackend}
                 className="select-field select-field--full"
               />
-              <button
-                className="btn"
-                style={{ width: '100%', justifyContent: 'center' }}
-                onClick={runSummarize}
-                disabled={jobActive}
-              >
+              <Button variant="primary" block onClick={runSummarize} disabled={jobActive}>
                 {actionLabel}
-              </button>
-              <button
-                className="btn btn--ghost btn--sm"
-                style={{ width: '100%', justifyContent: 'center' }}
-                onClick={runRetranscribe}
-                disabled={jobActive}
-              >
+              </Button>
+              <Button block onClick={runRetranscribe} disabled={jobActive}>
                 {retranscribeLabel}
-              </button>
+              </Button>
               {jobActive && (
-                <button
-                  className="btn"
-                  style={{
-                    width: '100%',
-                    justifyContent: 'center',
-                    background: 'var(--st-error)',
-                    color: 'white',
-                  }}
-                  onClick={stopJob}
-                >
+                <Button variant="danger" size="md" block onClick={stopJob}>
                   ⏹ עצור
-                </button>
+                </Button>
               )}
-              <button
-                className="btn btn--ghost btn--sm"
-                style={{ width: '100%', justifyContent: 'center', color: 'var(--st-error)' }}
-                onClick={deleteLecture}
-              >
+              <Button variant="danger-ghost" block onClick={deleteLecture}>
                 🗑 מחק הרצאה
-              </button>
+              </Button>
             </div>
           </div>
         </aside>

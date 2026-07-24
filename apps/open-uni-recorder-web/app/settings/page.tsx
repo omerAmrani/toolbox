@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { Status } from '@/app/components/Status';
+import { Button } from '@/app/components/Button';
 import FeatureHealthBanner from '@/app/components/FeatureHealthBanner';
 import { STATUS_LABEL, STATUS_COLOR, SEMESTER_HE } from '@/lib/status';
 import {SEMESTER_ORDER, getSelectedSemester, setSelectedSemester} from '@/lib/selectedSemester';
@@ -396,9 +397,9 @@ export default function SettingsPage() {
                   ))}
                 </select>
               )}
-              <button className="btn btn--ghost btn--sm" onClick={runSync} disabled={syncing}>
+              <Button onClick={runSync} disabled={syncing}>
                 {syncing ? 'מחפש...' : '🔍 בדוק עכשיו'}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -414,7 +415,7 @@ export default function SettingsPage() {
               visibleSyncSections.map((s) => (
                 <div key={s.classId} style={{ marginBottom: 12 }}>
                   <div style={{ font: '600 0.85rem/1 var(--font-ui)', marginBottom: 6 }}>{s.className}</div>
-                  {s.existing.map((l, i) => (
+                  {s.existing.filter((l) => !['summarized', 'done', 'skipped'].includes(l.status)).map((l, i) => (
                     <div key={l.id || i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
                       <span style={{ color: 'var(--ink-2)' }}>{l.name}</span>
                       <span style={{ color: STATUS_COLOR[l.status] || 'var(--muted)' }}>{STATUS_LABEL[l.status] || l.status}</span>
@@ -428,8 +429,8 @@ export default function SettingsPage() {
                       {s.newLectures.map((l, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
                           <span style={{ flex: 1, color: 'var(--ink-2)' }}>{l.name}</span>
-                          <button className="btn btn--sm" style={{ fontSize: '0.75rem', padding: '4px 8px' }} onClick={() => queueLectureItem(s.classId, i)}>+ הוסף</button>
-                          <button className="btn btn--ghost btn--sm" style={{ fontSize: '0.75rem', padding: '4px 8px' }} onClick={() => skipLectureItem(s.classId, i)}>דלג</button>
+                          <Button variant="primary" size="xs" onClick={() => queueLectureItem(s.classId, i)}>+ הוסף</Button>
+                          <Button size="xs" onClick={() => skipLectureItem(s.classId, i)}>דלג</Button>
                         </div>
                       ))}
                     </>
@@ -463,9 +464,9 @@ export default function SettingsPage() {
               <div className="set-card__title">אחסון</div>
               <div className="set-card__sub">תמלולים, סיכומים, מטה-דאטה</div>
             </div>
-            <button className="btn btn--ghost btn--sm" onClick={pickDataDir} disabled={pickingDir}>
+            <Button onClick={pickDataDir} disabled={pickingDir}>
               {pickingDir ? 'פותח...' : '📁 שנה תיקייה'}
-            </button>
+            </Button>
           </div>
 
           <div style={{ font: '0.85rem/1.5 var(--font-ui)', color: 'var(--muted)', marginBottom: 14 }}>
@@ -484,8 +485,8 @@ export default function SettingsPage() {
             <div style={{ marginBottom: 8 }}>
               <div style={{ fontSize: '0.85rem', wordBreak: 'break-all', marginBottom: 8 }}>נתיב נבחר: {pendingDataDir}</div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn--sm" onClick={saveDataDir} disabled={savingDir}>{savingDir ? 'שומר...' : 'שמור והפעל מחדש'}</button>
-                <button className="btn btn--ghost btn--sm" onClick={() => setPendingDataDir(null)}>ביטול</button>
+                <Button variant="primary" onClick={saveDataDir} disabled={savingDir}>{savingDir ? 'שומר...' : 'שמור והפעל מחדש'}</Button>
+                <Button onClick={() => setPendingDataDir(null)}>ביטול</Button>
               </div>
             </div>
           )}
@@ -496,9 +497,9 @@ export default function SettingsPage() {
           )}
 
           <div style={{ paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-            <button className="btn btn--ghost btn--sm" onClick={reloadFromDisk} disabled={reloading}>
+            <Button onClick={reloadFromDisk} disabled={reloading}>
               {reloading ? 'טוען...' : '♻️ שחזור מדיסק'}
-            </button>
+            </Button>
             {reloadMsg && (
               <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--muted)' }}>{reloadMsg}</div>
             )}
@@ -512,9 +513,9 @@ export default function SettingsPage() {
               <div className="set-card__title">תור עיבוד</div>
               <div className="set-card__sub">{pendingQueue.length} הרצאות ממתינות</div>
             </div>
-            <button className="btn btn--sm" onClick={triggerPipeline} disabled={queue?.running}>
+            <Button variant="primary" onClick={triggerPipeline} disabled={queue?.running}>
               {queue?.running ? 'פועל...' : '▶ הפעל תור'}
-            </button>
+            </Button>
           </div>
 
           {pendingQueue.length === 0 ? (
@@ -525,13 +526,9 @@ export default function SettingsPage() {
                 <div className="queue-row__class">{l.className}</div>
                 <div className="queue-row__name">{l.name}</div>
                 <Status s={l.status} />
-                <button
-                  className="btn btn--ghost btn--sm"
-                  style={{ fontSize: '0.75rem', padding: '4px 8px' }}
-                  onClick={() => skipFromQueue(l.classId, l.lectureId)}
-                >
+                <Button size="xs" onClick={() => skipFromQueue(l.classId, l.lectureId)}>
                   דלג
-                </button>
+                </Button>
               </div>
             ))
           )}
@@ -544,7 +541,7 @@ export default function SettingsPage() {
               <div className="set-card__title">מודלי בינה מלאכותית</div>
               <div className="set-card__sub">סטטוס בזמן אמת · בדיקת זמינות וזמני תגובה</div>
             </div>
-            <button className="btn btn--ghost btn--sm" onClick={testAll}>▶ בדוק את כולם</button>
+            <Button onClick={testAll}>▶ בדוק את כולם</Button>
           </div>
 
           {MODELS.map(({ key, emoji, name, sub, role }) => {
@@ -581,14 +578,14 @@ export default function SettingsPage() {
                       <span>{m.msg}</span>
                     </>
                   )}
-                  <button
-                    className="btn btn--ghost btn--sm"
-                    style={{ marginTop: 8, fontSize: '0.75rem' }}
+                  <Button
+                    size="xs"
+                    style={{ marginTop: 8 }}
                     onClick={() => testModel(key)}
                     disabled={m.status === 'testing'}
                   >
                     {m.status === 'testing' ? 'בודק...' : m.status === 'idle' ? 'בדוק' : 'בדוק שנית'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             );

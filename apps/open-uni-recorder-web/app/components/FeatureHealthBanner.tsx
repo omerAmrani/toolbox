@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiUrl } from '@/lib/api';
+import { Button } from '@/app/components/Button';
 
 const FEATURE_LABEL: Record<string, string> = {
   'transcription':      'תמלול',
@@ -48,13 +49,9 @@ export default function FeatureHealthBanner() {
         <span style={{ font: '600 0.88rem/1 var(--font-ui)', color: 'var(--warn)' }}>
           ⚠ {unavailable.length} {unavailable.length === 1 ? 'פיצ׳ר לא זמין' : 'פיצ׳רים לא זמינים'}
         </span>
-        <button
-          className="btn btn--ghost btn--sm"
-          style={{ fontSize: '0.75rem' }}
-          onClick={() => setDismissed(true)}
-        >
+        <Button size="xs" onClick={() => setDismissed(true)}>
           הסתר
-        </button>
+        </Button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
