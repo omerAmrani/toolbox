@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { SEMESTER_ORDER, useSelectedSemester } from '@/lib/selectedSemester';
+import NewCourseModal from '@/app/components/NewCourseModal';
 
 interface ClassRow {
   id: string;
@@ -17,19 +18,19 @@ interface ClassRow {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadClasses = () => {
     fetch(apiUrl('/api/classes'))
       .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) setClasses(Array.isArray(data) ? data : []);
-      })
+      .then((data) => setClasses(Array.isArray(data) ? data : []))
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+  };
+
+  useEffect(() => {
+    loadClasses();
   }, []);
 
   const selectedSemesterKey = useSelectedSemester();
@@ -70,6 +71,15 @@ export default function Sidebar() {
           סטטיסטיקות
         </Link>
         */}
+        <button
+          type="button"
+          className="sb__item"
+          data-testid="sidebar-create-class-btn"
+          onClick={() => setModalOpen(true)}
+        >
+          <span className="sb__icon">+</span>
+          הוסף קורס
+        </button>
         <Link className={'sb__item' + (at('/settings') ? ' is-active' : '')} href="/settings">
           <span className="sb__icon">⚙</span>
           הגדרות
@@ -113,6 +123,16 @@ export default function Sidebar() {
           <small>חיבור לא מוגדר</small>
         </div>
       </div>
+
+      <NewCourseModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={(id) => {
+          setModalOpen(false);
+          loadClasses();
+          router.push(`/classes/${id}`);
+        }}
+      />
     </aside>
   );
 }

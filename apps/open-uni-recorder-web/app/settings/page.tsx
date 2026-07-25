@@ -5,6 +5,7 @@ import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { Status } from '@/app/components/Status';
 import { Button } from '@/app/components/Button';
+import { Select } from '@/app/components/Select';
 import FeatureHealthBanner from '@/app/components/FeatureHealthBanner';
 import { STATUS_LABEL, STATUS_COLOR, SEMESTER_HE } from '@/lib/status';
 import {SEMESTER_ORDER, getSelectedSemester, setSelectedSemester} from '@/lib/selectedSemester';
@@ -214,10 +215,21 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   }, []);
 
+  const knownSemesterKeys = useRef<Set<string> | null>(null);
+
   useEffect(() => {
     if (semesterOptions.length === 0) return;
-    if (semesterOptions.some((o) => o.key === selectedSemesterKey)) return;
-    setSelectedSemesterKey(semesterOptions[0]!.key);
+    const currentKeys = new Set(semesterOptions.map((o) => o.key));
+    const newest = semesterOptions[0]!;
+    const isFirstLoad = knownSemesterKeys.current === null;
+    const newestJustAppeared = !isFirstLoad && !knownSemesterKeys.current!.has(newest.key);
+    knownSemesterKeys.current = currentKeys;
+
+    if (newestJustAppeared) {
+      setSelectedSemesterKey(newest.key);
+    } else if (!currentKeys.has(selectedSemesterKey)) {
+      setSelectedSemesterKey(newest.key);
+    }
   }, [semesterOptions, selectedSemesterKey]);
 
   useEffect(() => {
@@ -387,15 +399,11 @@ export default function SettingsPage() {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {semesterOptions.length > 0 && (
-                <select
-                  className="select-field"
+                <Select
                   value={selectedSemesterKey}
-                  onChange={(e) => setSelectedSemesterKey(e.target.value)}
-                >
-                  {semesterOptions.map((o) => (
-                    <option key={o.key} value={o.key}>{o.label}</option>
-                  ))}
-                </select>
+                  onChange={setSelectedSemesterKey}
+                  options={semesterOptions.map((o) => ({ value: o.key, label: o.label }))}
+                />
               )}
               <Button onClick={runSync} disabled={syncing}>
                 {syncing ? 'מחפש...' : '🔍 בדוק עכשיו'}

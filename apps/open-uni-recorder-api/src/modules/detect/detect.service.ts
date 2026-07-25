@@ -32,6 +32,38 @@ export class DetectService {
     return page;
   }
 
+  async extractCourseMeta(opalCourseUrl: string, onProgress = (_: string) => {}): Promise<any> {
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const page = await this.loginToOpal(browser, onProgress);
+
+      onProgress('קורא פרטי קורס מ-OPAL...');
+      await page.goto(opalCourseUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
+
+      const raw = await page.evaluate(() => {
+        const doc = (globalThis as any).document;
+        const nameEl = doc.querySelector('.coursename [dir="rtl"]');
+        const codeEl = doc.querySelector('.coursename .header_number');
+        const semesterEl = doc.querySelector('.semester_span .header_number');
+        return {
+          name: nameEl?.textContent?.trim() || null,
+          code: codeEl?.textContent?.replace(/^[^\d]*/, '').trim() || null,
+          semesterRaw: semesterEl?.textContent?.trim() || null,
+        };
+      });
+
+      const semesterMatch = raw.semesterRaw?.match(/(\d{4}).*?([א-ת])/);
+      return {
+        name: raw.name,
+        code: raw.code,
+        year: semesterMatch ? Number(semesterMatch[1]) : null,
+        semester: semesterMatch ? semesterMatch[2] : null,
+      };
+    } finally {
+      await browser.close().catch(() => {});
+    }
+  }
+
   async detectNewLectures(classId: string, onProgress = (_: string) => {}): Promise<any[]> {
     const cls = this.storage.getClass(classId);
     if (!cls) throw new Error(`Class not found: ${classId}`);

@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/Toast';
 import { Status, fmtDateLong } from '@/app/components/Status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
 import { Button } from '@/app/components/Button';
+import NewCourseModal from '@/app/components/NewCourseModal';
 
 interface ClassInfo {
   id: string;
@@ -16,6 +17,7 @@ interface ClassInfo {
   semester?: string | null;
   year?: number | null;
   opalCourseUrl?: string | null;
+  code?: string | null;
 }
 
 interface Lecture {
@@ -35,22 +37,22 @@ export default function ClassDetailPage() {
 
   const [cls, setCls] = useState<ClassInfo | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [opalUrl, setOpalUrl] = useState('');
-  const [editingUrl, setEditingUrl] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [lectures, setLectures] = useState<Lecture[] | null>(null);
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadClass = useCallback(async () => {
     try {
-      const all: ClassInfo[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
+      const r = await fetch(apiUrl('/api/classes'));
+      if (!r.ok) throw new Error('failed to load classes');
+      const all: ClassInfo[] = await r.json();
       const found = all.find((c) => c.id === classId);
       if (!found) {
         setNotFound(true);
         return;
       }
       setCls(found);
-      setOpalUrl(found.opalCourseUrl || '');
       document.title = `${found.name} — האוניברסיטה הפתוחה`;
     } catch {
       setNotFound(true);
@@ -59,9 +61,9 @@ export default function ClassDetailPage() {
 
   const loadLectures = useCallback(async () => {
     try {
-      const data: Lecture[] = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures`),
-      ).then((r) => r.json());
+      const r = await fetch(apiUrl(`/api/classes/${classId}/lectures`));
+      if (!r.ok) throw new Error('failed to load lectures');
+      const data: Lecture[] = await r.json();
       setLectures(data);
     } catch {
       setLectures([]);
@@ -106,21 +108,6 @@ export default function ClassDetailPage() {
   const summarizedCount = orderedLectures.filter(
     (l) => l.status === 'summarized' || l.status === 'done',
   ).length;
-
-  const saveOpalUrl = async () => {
-    const r = await fetch(apiUrl(`/api/classes/${classId}`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ opalCourseUrl: opalUrl.trim() }),
-    });
-    if (r.ok) {
-      showToast('קישור OPAL נשמר');
-      setEditingUrl(false);
-      if (cls) setCls({ ...cls, opalCourseUrl: opalUrl.trim() });
-    } else {
-      showToast('שגיאה בשמירה', true);
-    }
-  };
 
   const deleteClass = async () => {
     const ok = await deleteResource(`/api/classes/${classId}`, 'למחוק את הקורס וכל ההרצאות שלו?');
@@ -248,6 +235,7 @@ export default function ClassDetailPage() {
       <div className="detail-h" data-color={color}>
         <div className="detail-h__mark">{classIcon(cls.name)}</div>
         <div className="detail-h__body">
+          <div className="detail-h__code">{cls.code || '—'}</div>
           <h1 className="detail-h__title">{cls.name}</h1>
           <div className="detail-h__meta">
             {meta && (
@@ -262,40 +250,25 @@ export default function ClassDetailPage() {
           </div>
         </div>
         <div className="detail-h__actions">
-          {editingUrl ? (
-            <input
-              type="url"
-              dir="ltr"
-              autoFocus
-              value={opalUrl}
-              onChange={(e) => setOpalUrl(e.target.value)}
-              onBlur={saveOpalUrl}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveOpalUrl();
-                if (e.key === 'Escape') {
-                  setOpalUrl(cls.opalCourseUrl || '');
-                  setEditingUrl(false);
-                }
-              }}
-              placeholder="https://opal.openu.ac.il/course/..."
-              style={{
-                padding: '6px 10px',
-                border: '1px solid var(--line)',
-                borderRadius: 8,
-                background: 'var(--surface)',
-                font: '0.8rem/1 var(--font-mono)',
-              }}
-            />
-          ) : (
-            <Button onClick={() => setEditingUrl(true)} title="ערוך קישור OPAL">
-              ✎ קישור
-            </Button>
-          )}
+          <Button icon onClick={() => setEditModalOpen(true)} title="ערוך קורס">
+            ✎
+          </Button>
           <Button variant="danger-ghost" icon onClick={deleteClass} title="מחק קורס">
             🗑
           </Button>
         </div>
       </div>
+
+      <NewCourseModal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        editTarget={cls}
+        onCreated={() => {
+          setEditModalOpen(false);
+          showToast('הקורס עודכן');
+          loadClass();
+        }}
+      />
 
       {lectures === null ? (
         <div style={{ color: 'var(--muted)' }}>טוען...</div>

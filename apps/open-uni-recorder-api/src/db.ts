@@ -23,7 +23,8 @@ db.exec(`
     semester TEXT,
     year INTEGER,
     createdAt TEXT NOT NULL,
-    opalCourseUrl TEXT
+    opalCourseUrl TEXT,
+    code TEXT
   );
 
   CREATE TABLE IF NOT EXISTS lectures (
@@ -55,5 +56,6 @@ db.exec(`
 `);
 
 try { db.exec('ALTER TABLE summaries ADD COLUMN model TEXT'); } catch (_) {}
+try { db.exec('ALTER TABLE classes ADD COLUMN code TEXT'); } catch (_) {}
 
 export default db;

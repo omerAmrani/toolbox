@@ -26,13 +26,13 @@ function lectureWithSummaries(row: any): any {
 }
 
 // ── Classes ───────────────────────────────────────────────────────────────────
-export function createClass({ name, semester, year }: { name: string; semester?: string; year?: number }): any {
+export function createClass({ name, semester, year, code, opalCourseUrl }: { name: string; semester?: string; year?: number; code?: string; opalCourseUrl?: string }): any {
   const id = makeId(name);
   const dir = path.join(CLASSES_DIR, id);
   mkdirSync(path.join(dir, 'lectures'), { recursive: true });
-  const meta = { id, name, semester, year: year ? Number(year) : null, createdAt: new Date().toISOString() };
-  db.prepare('INSERT INTO classes (id, name, semester, year, createdAt) VALUES (?, ?, ?, ?, ?)')
-    .run(meta.id, meta.name, meta.semester, meta.year, meta.createdAt);
+  const meta = { id, name, semester, year: year ? Number(year) : null, createdAt: new Date().toISOString(), code: code || null, opalCourseUrl: opalCourseUrl || null };
+  db.prepare('INSERT INTO classes (id, name, semester, year, createdAt, code, opalCourseUrl) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(meta.id, meta.name, meta.semester, meta.year, meta.createdAt, meta.code, meta.opalCourseUrl);
   writeMetaBackup(path.join(dir, 'meta.json'), meta);
   return meta;
 }
@@ -199,8 +199,8 @@ export function reloadFromDisk(): { classes: number; lectures: number } {
     try { classMeta = JSON.parse(readFileSync(metaPath, 'utf8')); } catch { continue; }
 
     db.prepare(
-      'INSERT OR REPLACE INTO classes (id, name, semester, year, createdAt, opalCourseUrl) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(classMeta.id, classMeta.name, classMeta.semester, classMeta.year || null, classMeta.createdAt, classMeta.opalCourseUrl || null);
+      'INSERT OR REPLACE INTO classes (id, name, semester, year, createdAt, opalCourseUrl, code) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(classMeta.id, classMeta.name, classMeta.semester, classMeta.year || null, classMeta.createdAt, classMeta.opalCourseUrl || null, classMeta.code || null);
     classCount++;
 
     const lecturesDir = path.join(CLASSES_DIR, classId, 'lectures');

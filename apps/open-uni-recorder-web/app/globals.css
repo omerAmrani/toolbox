@@ -53,6 +53,8 @@
   --type-body:    400 0.95rem/1.55 var(--font-ui);
   --type-small:   400 0.82rem/1.45 var(--font-ui);
   --type-eyebrow: 600 0.72rem/1 var(--font-ui);
+
+  color-scheme: light;
 }
 
 /* Compact density */
@@ -107,6 +109,8 @@
   --accent-2:  #d9bb83;
   --accent-on: #15171c;
   --accent-soft: #2a2820;
+
+  color-scheme: dark;
 }
 
 /* ── Palette swap: terracotta ─────────────────────────────────────────── */
@@ -144,11 +148,21 @@ input, select, textarea { font: inherit; color: inherit; }
 ::selection { background: var(--accent); color: var(--accent-on); }
 
 .select-field {
-  padding: 6px 11px;
-  background: var(--surface);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 16px 9px 34px;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: left 16px top 50%, left 21px top 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  font: 0.8rem/1.2 var(--font-ui);
+  border-radius: 9px;
+  font: 600 0.8rem/1.2 var(--font-ui);
   color: var(--ink);
   cursor: pointer;
   outline: none;
@@ -162,6 +176,27 @@ input, select, textarea { font: inherit; color: inherit; }
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
 }
 .select-field--full { width: 100%; }
+
+.select-pop {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  padding: 4px;
+  min-width: var(--radix-select-trigger-width);
+  z-index: 90;
+}
+.select-pop__item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font: 600 0.8rem/1.2 var(--font-ui);
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+}
+.select-pop__item[data-highlighted] {
+  background: var(--surface-2);
+}
 
 /* ── App shell ────────────────────────────────────────────────────────── */
 .app {
@@ -230,6 +265,7 @@ input, select, textarea { font: inherit; color: inherit; }
   width: 100%;
 }
 .sb__item:hover { background: var(--surface-2); color: var(--ink); }
+button.sb__item { border: none; background: none; }
 .sb__item.is-active {
   background: var(--ink);
   color: var(--bg);
@@ -411,7 +447,7 @@ input, select, textarea { font: inherit; color: inherit; }
 .btn--xs { padding: 4px 8px; font-size: 0.75rem; border-radius: 6px; }
 .btn--block { width: 100%; justify-content: center; }
 .btn--icon {
-  padding: 7px; aspect-ratio: 1; justify-content: center;
+  width: 30px; height: 30px; padding: 0; justify-content: center;
 }
 .btn:disabled, .btn[disabled] {
   opacity: 0.45; cursor: not-allowed; transform: none;
@@ -518,21 +554,27 @@ input, select, textarea { font: inherit; color: inherit; }
   font: 700 1.3rem/1 var(--font-read);
   color: var(--ink);
 }
-.class-card__code {
-  font: 500 0.78rem/1 var(--font-mono);
-  color: var(--faint);
-  letter-spacing: 0.05em;
-}
 .class-card__title {
   font: 700 1.25rem/1.25 var(--font-read);
   letter-spacing: -0.01em;
   margin-top: 28px;
   margin-bottom: 6px;
 }
+.class-card__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 18px;
+}
 .class-card__meta {
   font: var(--type-small);
   color: var(--muted);
-  margin-bottom: 18px;
+}
+.class-card__code {
+  font: 500 0.78rem/1 var(--font-mono);
+  color: var(--faint);
+  letter-spacing: 0.05em;
+  margin-inline-start: auto;
 }
 .class-card__stats {
   display: flex; gap: 8px;

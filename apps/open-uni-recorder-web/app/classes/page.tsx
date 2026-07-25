@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { apiUrl, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
+import { SEMESTER_ORDER } from '@/lib/selectedSemester';
 import NewCourseModal from '@/app/components/NewCourseModal';
 import { Button } from '@/app/components/Button';
 
@@ -13,6 +14,7 @@ interface ClassRow {
   name: string;
   semester?: string | null;
   year?: number | null;
+  code?: string | null;
   lectureCount: number;
 }
 
@@ -20,8 +22,6 @@ interface LectureRow {
   id: string;
   status: string;
 }
-
-const SEMESTER_ORDER: Record<string, number> = { spring: 4, winter: 3, fall: 2, summer: 1 };
 
 export default function ClassesPage() {
   const router = useRouter();
@@ -129,7 +129,10 @@ export default function ClassesPage() {
                   </Button>
                 </div>
                 <h3 className="class-card__title">{c.name}</h3>
-                {meta && <div className="class-card__meta">{meta}</div>}
+                <div className="class-card__row">
+                  {meta && <div className="class-card__meta">{meta}</div>}
+                  <div className="class-card__code">{c.code || '—'}</div>
+                </div>
                 <div className="class-card__stats">
                   <div className="class-card__stat">
                     <div className="class-card__stat-n">

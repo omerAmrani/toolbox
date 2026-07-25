@@ -45,8 +45,7 @@ export const STATUS_ABORT_TYPE: Record<string, 'transcribe' | 'summarize'> = {
 };
 
 export const SEMESTER_HE: Record<string, string> = {
-  spring: 'אביב',
-  summer: 'קיץ',
-  fall: 'סתיו',
-  winter: 'חורף',
+  א: 'א',
+  ב: 'ב',
+  ג: 'ג',
 };

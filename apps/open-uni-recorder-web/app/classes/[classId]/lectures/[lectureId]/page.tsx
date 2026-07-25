@@ -10,6 +10,7 @@ import { BackendSelect } from '@/app/components/BackendSelect';
 import type { Backend } from '@/app/components/BackendSelect';
 import { Status, fmtDateLong } from '@/app/components/Status';
 import { Button } from '@/app/components/Button';
+import { Select } from '@/app/components/Select';
 
 interface LectureMeta {
   id: string;
@@ -416,21 +417,15 @@ export default function LecturePage() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                className="select-field"
+              <Select
                 value={viewedSummaryId ?? history.currentSummary ?? ''}
-                onChange={(e) => e.target.value && viewSummary(e.target.value)}
-              >
-                {history.versions.map((v, i) => {
+                onChange={(v) => v && viewSummary(v)}
+                options={history.versions.map((v, i) => {
                   const label = v.backend === 'claude' ? 'Claude' : v.backend === 'gemini' ? 'Gemini' : 'Other';
                   const num = history.versions.length - i;
-                  return (
-                    <option key={v.id} value={v.id}>
-                      {label} #{num}
-                    </option>
-                  );
+                  return { value: v.id, label: `${label} #${num}` };
                 })}
-              </select>
+              />
               <Button
                 variant={activeView === 'transcript' ? 'primary' : 'ghost'}
                 aria-pressed={activeView === 'transcript'}
@@ -524,11 +519,7 @@ export default function LecturePage() {
               >
                 מודל AI
               </label>
-              <BackendSelect
-                value={backend}
-                onChange={setBackend}
-                className="select-field select-field--full"
-              />
+              <BackendSelect value={backend} onChange={setBackend} full />
               <Button variant="primary" block onClick={runSummarize} disabled={jobActive}>
                 {actionLabel}
               </Button>

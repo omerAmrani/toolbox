@@ -67,6 +67,35 @@ describe('ClassesController', () => {
       expect(res.status).toBe(201);
       expect(res.body.name).toBe('History');
     });
+
+    it('creates a class with a code', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/classes')
+        .send({ name: 'Chemistry', semester: 'א', year: 2025, code: '10493' });
+      expect(res.status).toBe(201);
+      expect(res.body.code).toBe('10493');
+    });
+
+    it('creates a class with an opalCourseUrl', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/classes')
+        .send({ name: 'Biology', semester: 'ב', year: 2026, opalCourseUrl: 'https://opal.example.com/course/456' });
+      expect(res.status).toBe(201);
+      expect(res.body.opalCourseUrl).toBe('https://opal.example.com/course/456');
+
+      const list = await request(app.getHttpServer()).get('/api/classes');
+      expect(list.body.find((c: any) => c.id === res.body.id).opalCourseUrl).toBe('https://opal.example.com/course/456');
+    });
+  });
+
+  describe('POST /api/classes/opal-metadata', () => {
+    it('returns 400 when opalCourseUrl is missing', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/classes/opal-metadata')
+        .send({});
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBeDefined();
+    });
   });
 
   describe('PATCH /api/classes/:classId', () => {
@@ -87,6 +116,18 @@ describe('ClassesController', () => {
         .send({ opalCourseUrl: 'https://opal.example.com/course/123' });
       expect(res.status).toBe(200);
       expect(res.body.opalCourseUrl).toBe('https://opal.example.com/course/123');
+    });
+
+    it('updates code, semester and year', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/api/classes')
+        .send({ name: 'Bio' });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/api/classes/${created.body.id}`)
+        .send({ code: '10493', semester: 'ב', year: 2026 });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ code: '10493', semester: 'ב', year: 2026 });
     });
   });
 

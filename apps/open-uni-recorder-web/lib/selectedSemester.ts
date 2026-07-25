@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 export const SELECTED_SEMESTER_KEY = 'our:settings:selectedSemester';
-export const SEMESTER_ORDER: Record<string, number> = { spring: 4, winter: 3, fall: 2, summer: 1 };
+export const SEMESTER_ORDER: Record<string, number> = { א: 1, ב: 2, ג: 3 };
 
 const CHANGE_EVENT = 'selected-semester-changed';
 

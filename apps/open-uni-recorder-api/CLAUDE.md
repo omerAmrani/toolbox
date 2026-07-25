@@ -49,3 +49,9 @@ For non-trivial changes, check `docs/` for relevant context first:
 Integration tests live in `test/`. Run with `pnpm test` (uses `NODE_ENV=test`, `--runInBand`).
 
 When adding or changing a feature, update the relevant test file in `test/` alongside the doc in `docs/`. Both must stay in sync with the code.
+
+**Suggested CLAUDE.md addition:**
+
+## Library-first check
+
+Before implementing a non-trivial UI/logic pattern from scratch, check whether an existing library already solves it. If a known library fits, name it and its trade-offs before writing custom code. If unsure whether one exists, search rather than assume none does. Only hand-roll after confirming no suitable library is already installed or worth adding.
