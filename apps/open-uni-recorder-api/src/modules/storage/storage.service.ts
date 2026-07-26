@@ -6,8 +6,11 @@ import {
   saveSummaryVersion, getSummaryVersions, getSummaryContent,
   getCurrentSummaryContent, deleteSummaryVersion,
   reloadFromDisk,
+  getCronSchedule, setCronSchedule, getNotifyEmail, setNotifyEmail,
+  getActiveSemester, setActiveSemester,
   CLASSES_DIR,
 } from '../../storage';
+export type { CronSchedule, ActiveSemester } from '../../storage';
 
 @Injectable()
 export class StorageService {
@@ -28,5 +31,11 @@ export class StorageService {
   readonly getCurrentSummaryContent = getCurrentSummaryContent;
   readonly deleteSummaryVersion = deleteSummaryVersion;
   readonly reloadFromDisk = reloadFromDisk;
+  readonly getCronSchedule = getCronSchedule;
+  readonly setCronSchedule = setCronSchedule;
+  readonly getNotifyEmail = getNotifyEmail;
+  readonly setNotifyEmail = setNotifyEmail;
+  readonly getActiveSemester = getActiveSemester;
+  readonly setActiveSemester = setActiveSemester;
   readonly CLASSES_DIR = CLASSES_DIR;
 }

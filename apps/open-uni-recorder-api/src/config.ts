@@ -18,7 +18,6 @@ export const {
   CLAUDE_MODEL = 'claude-haiku-4-5-20251001',
   GMAIL_USER,
   GMAIL_APP_PASSWORD,
-  NOTIFY_EMAIL,
   PORT = '3001',
   WEB_ORIGIN = 'http://localhost:3000',
 } = process.env;

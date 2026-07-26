@@ -4,6 +4,49 @@ import db, { CLASSES_DIR } from './db';
 
 export { CLASSES_DIR };
 
+// ── App settings ──────────────────────────────────────────────────────────────
+export interface CronSchedule { days: number[]; hour: number; minute: number }
+const DEFAULT_CRON_SCHEDULE: CronSchedule = { days: [4, 5], hour: 10, minute: 0 };
+
+function getSetting(key: string): string | null {
+  const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+function setSetting(key: string, value: string): void {
+  db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+}
+
+export function getCronSchedule(): CronSchedule {
+  const raw = getSetting('cronSchedule');
+  if (!raw) return DEFAULT_CRON_SCHEDULE;
+  try { return JSON.parse(raw); } catch { return DEFAULT_CRON_SCHEDULE; }
+}
+
+export function setCronSchedule(schedule: CronSchedule): void {
+  setSetting('cronSchedule', JSON.stringify(schedule));
+}
+
+export function getNotifyEmail(): string | null {
+  return getSetting('notifyEmail');
+}
+
+export function setNotifyEmail(email: string): void {
+  setSetting('notifyEmail', email);
+}
+
+export interface ActiveSemester { semester: string; year: number }
+
+export function getActiveSemester(): ActiveSemester | null {
+  const raw = getSetting('activeSemester');
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+export function setActiveSemester(active: ActiveSemester): void {
+  setSetting('activeSemester', JSON.stringify(active));
+}
+
 function makeId(name: string): string {
   const clean = name.toLowerCase()
     .replace(/[^\w]/g, '-')

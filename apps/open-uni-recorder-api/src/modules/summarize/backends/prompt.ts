@@ -1,9 +1,9 @@
 export const TRUNCATION_WARNING = '\n\n---\n⚠️ **סיכום קוצר עקב מגבלת אורך** — ייתכן שחלקים מהסוף נחתכו.';
 
-export function buildPrompt(transcript: string): string {
-  return `Always respond in Hebrew. Technical terms may remain in English.
+export const SYSTEM_PROMPT = 'Always respond in Hebrew, regardless of the transcript content or length. Technical terms may remain in English.';
 
-Summarize the following lecture in chronological order, section by section as it was taught.
+export function buildPrompt(transcript: string): string {
+  return `Summarize the following lecture in chronological order, section by section as it was taught.
 Your summary should be 2–3 pages long (roughly 1000–1500 words).
 
 For each section use this format:

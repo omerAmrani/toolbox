@@ -105,7 +105,7 @@ export class PipelineController {
     const summaryContent = this.storage.getCurrentSummaryContent(classId, lectureId);
     if (!summaryContent) return res.status(400).json({ error: 'No summary found for this lecture' });
     try {
-      await this.email.sendLectureSummary({ className: cls.name, lectureName: lecture.name, lectureDate: lecture.lectureDate, summaryContent });
+      await this.email.sendLectureSummary({ to: this.storage.getNotifyEmail(), className: cls.name, lectureName: lecture.name, lectureDate: lecture.lectureDate, summaryContent });
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

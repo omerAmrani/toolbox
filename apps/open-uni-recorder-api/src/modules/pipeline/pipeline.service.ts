@@ -153,6 +153,7 @@ export class PipelineService {
 
           const cls = this.storage.getClass(classId);
           this.email.sendLectureSummary({
+            to: this.storage.getNotifyEmail(),
             className: cls?.name || classId,
             lectureName: lecture.name,
             lectureDate: lecture.lectureDate,
@@ -188,7 +189,10 @@ export class PipelineService {
       return { found: 0, queued: 0 };
     }
 
-    const classes = this.storage.getClasses().filter((c: any) => c.opalCourseUrl);
+    const active = this.storage.getActiveSemester();
+    const classes = this.storage.getClasses().filter((c: any) =>
+      c.opalCourseUrl && (!active || (c.semester === active.semester && c.year === active.year)),
+    );
     const foundLectures: any[] = [];
 
     for (const cls of classes) {
@@ -208,7 +212,7 @@ export class PipelineService {
     onProgress(`נמצאו ${foundLectures.length} הרצאות חדשות`);
 
     if (foundLectures.length > 0) {
-      this.email.sendDetectionNotification(foundLectures).catch((err: any) =>
+      this.email.sendDetectionNotification(this.storage.getNotifyEmail(), foundLectures).catch((err: any) =>
         console.warn('[email] detection notification failed:', err.message)
       );
     }

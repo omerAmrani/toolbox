@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import nodemailer from 'nodemailer';
 import { marked } from 'marked';
-import { GMAIL_USER, GMAIL_APP_PASSWORD, NOTIFY_EMAIL } from '../../config';
+import { GMAIL_USER, GMAIL_APP_PASSWORD } from '../../config';
 
 @Injectable()
 export class EmailService {
@@ -12,9 +12,9 @@ export class EmailService {
     return `${day}/${month}/${year}`;
   }
 
-  private isConfigured(): boolean {
-    if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !NOTIFY_EMAIL) {
-      console.log('[email] skipping — GMAIL_USER / GMAIL_APP_PASSWORD / NOTIFY_EMAIL not configured');
+  private isConfigured(to?: string | null): to is string {
+    if (!GMAIL_USER || !GMAIL_APP_PASSWORD || !to) {
+      console.log('[email] skipping — GMAIL_USER / GMAIL_APP_PASSWORD not configured, or no recipient set');
       return false;
     }
     return true;
@@ -27,8 +27,8 @@ export class EmailService {
     });
   }
 
-  async sendDetectionNotification(found: { className: string; lectureName: string; lectureDate?: string }[]): Promise<void> {
-    if (!this.isConfigured()) return;
+  async sendDetectionNotification(to: string | null, found: { className: string; lectureName: string; lectureDate?: string }[]): Promise<void> {
+    if (!this.isConfigured(to)) return;
 
     const rows = found.map(l => {
       const date = this.formatDate(l.lectureDate) || '—';
@@ -63,7 +63,7 @@ export class EmailService {
 
     await this.createTransporter().sendMail({
       from: GMAIL_USER,
-      to: NOTIFY_EMAIL,
+      to,
       subject: `[פייפליין] נמצאו ${found.length} הרצאות חדשות`,
       html,
       text,
@@ -72,8 +72,8 @@ export class EmailService {
     console.log(`[email] sent detection notification — ${found.length} lectures`);
   }
 
-  async sendLectureSummary({ className, lectureName, lectureDate, summaryContent }: { className: string; lectureName: string; lectureDate?: string; summaryContent: string }): Promise<void> {
-    if (!this.isConfigured()) return;
+  async sendLectureSummary({ to, className, lectureName, lectureDate, summaryContent }: { to: string | null; className: string; lectureName: string; lectureDate?: string; summaryContent: string }): Promise<void> {
+    if (!this.isConfigured(to)) return;
 
     const dateStr = this.formatDate(lectureDate) || this.formatDate(new Date().toISOString().slice(0, 10));
     const htmlBody = await marked(summaryContent);
@@ -99,12 +99,12 @@ export class EmailService {
 
     await this.createTransporter().sendMail({
       from: GMAIL_USER,
-      to: NOTIFY_EMAIL,
+      to,
       subject: `[${className}] — ${lectureName}, ${dateStr}`,
       html,
       text: summaryContent,
     });
 
-    console.log(`[email] sent summary for "${lectureName}" to ${NOTIFY_EMAIL}`);
+    console.log(`[email] sent summary for "${lectureName}" to ${to}`);
   }
 }

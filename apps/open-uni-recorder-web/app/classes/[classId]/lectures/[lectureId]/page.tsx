@@ -298,9 +298,19 @@ export default function LecturePage() {
   };
 
   const copyActive = async () => {
-    const text = activeView === 'transcript' ? transcript : summary;
-    if (!text) return;
-    await navigator.clipboard.writeText(text);
+    if (activeView === 'transcript') {
+      if (!transcript) return;
+      await navigator.clipboard.writeText(transcript);
+      showToast('הועתק');
+      return;
+    }
+    if (!summary) return;
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'text/html': new Blob([summaryHtml], { type: 'text/html' }),
+        'text/plain': new Blob([summary], { type: 'text/plain' }),
+      }),
+    ]);
     showToast('הועתק');
   };
 

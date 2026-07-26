@@ -7,6 +7,7 @@ export function truncateAll() {
   db.prepare('DELETE FROM summaries').run();
   db.prepare('DELETE FROM lectures').run();
   db.prepare('DELETE FROM classes').run();
+  db.prepare('DELETE FROM app_settings').run();
 }
 
 export function cleanClassesDir() {

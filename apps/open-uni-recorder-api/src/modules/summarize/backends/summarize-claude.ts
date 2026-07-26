@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { buildPrompt, summarizeChunk, TRUNCATION_WARNING } from './prompt';
+import { buildPrompt, summarizeChunk, TRUNCATION_WARNING, SYSTEM_PROMPT } from './prompt';
 import { MERGE_MAX_TOKENS, CLAUDE_MODEL, ANTHROPIC_API_KEY } from '../../../config';
 
 export { summarizeChunk };
@@ -19,6 +19,7 @@ export async function mergeSummaries(chunks: string[], onProgress = (_: string) 
     const stream = client.messages.stream({
       model: CLAUDE_MODEL!,
       max_tokens: MERGE_MAX_TOKENS,
+      system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: buildPrompt(fullTranscript) }],
     });
     let full = '';
@@ -40,6 +41,7 @@ export async function mergeSummaries(chunks: string[], onProgress = (_: string) 
   const response = await client.messages.create({
     model: CLAUDE_MODEL!,
     max_tokens: MERGE_MAX_TOKENS,
+    system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildPrompt(fullTranscript) }],
   });
   return (response.content[0] as any).text;

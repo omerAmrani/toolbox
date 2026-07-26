@@ -53,6 +53,11 @@ db.exec(`
     backend TEXT NOT NULL,
     model TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
 `);
 
 try { db.exec('ALTER TABLE summaries ADD COLUMN model TEXT'); } catch (_) {}

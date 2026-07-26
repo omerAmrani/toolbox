@@ -41,6 +41,9 @@ importers:
       better-sqlite3:
         specifier: ^12.10.0
         version: 12.10.0
+      cron:
+        specifier: ^3.2.1
+        version: 3.2.1
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2

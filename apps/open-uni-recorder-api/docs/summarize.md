@@ -22,7 +22,7 @@ Generates an AI summary from a lecture transcript. Supports multiple backends an
 
 **Versions:** each run appends a new version entry. `currentSummary` on the lecture points to the active one. Old versions can be switched to or deleted via the summaries routes.
 
-**Output language:** controlled by `OUTPUT_LANG` config.
+**Output language:** hardcoded to Hebrew via `SYSTEM_PROMPT` in `backends/prompt.ts`, passed as the API's native `system` instruction (not a user-content string) for stronger adherence on long transcripts. There is no `OUTPUT_LANG` config — no per-language setting exists yet.
 
 ## Web
 

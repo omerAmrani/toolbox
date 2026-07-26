@@ -5,8 +5,7 @@ import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { Button } from '@/app/components/Button';
 import { Select } from '@/app/components/Select';
-import FeatureHealthBanner from '@/app/components/FeatureHealthBanner';
-import { STATUS_LABEL, STATUS_COLOR, SEMESTER_HE } from '@/lib/status';
+import { SEMESTER_HE } from '@/lib/status';
 import {SEMESTER_ORDER, getSelectedSemester, setSelectedSemester} from '@/lib/selectedSemester';
 
 interface DataDirInfo {
@@ -15,12 +14,13 @@ interface DataDirInfo {
   hasDb: boolean;
 }
 
-interface CronLog {
-  timestamp: string;
-  trigger: string;
-  found: number;
-  queued: number;
+interface CronSchedule {
+  days: number[];
+  hour: number;
+  minute: number;
 }
+
+const DAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 
 interface ClassRow {
   id: string;
@@ -28,15 +28,6 @@ interface ClassRow {
   opalCourseUrl?: string | null;
   semester?: string | null;
   year?: number | null;
-}
-
-interface Lecture {
-  id: string;
-  name: string;
-  status: string;
-  lectureDate?: string | null;
-  addedAt?: string;
-  currentSummary?: string | null;
 }
 
 interface NewLecture {
@@ -52,7 +43,6 @@ interface SyncSection {
   className: string;
   semester?: string | null;
   year?: number | null;
-  existing: Lecture[];
   newLectures: NewLecture[];
 }
 
@@ -81,7 +71,15 @@ export default function SettingsPage() {
   const [reloadMsg, setReloadMsg] = useState('');
   const [reloading, setReloading] = useState(false);
 
-  const [cronLog, setCronLog] = useState<CronLog | null>(null);
+  const [scheduleDays, setScheduleDays] = useState<number[]>([4, 5]);
+  const [scheduleTime, setScheduleTime] = useState('10:00');
+  const [nextRun, setNextRun] = useState<string | null>(null);
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleMsg, setScheduleMsg] = useState<{ msg: string; error?: boolean } | null>(null);
+
+  const [emailDraft, setEmailDraft] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailMsg, setEmailMsg] = useState<{ msg: string; error?: boolean } | null>(null);
 
   const [syncSections, setSyncSections] = useState<SyncSection[]>([]);
   const [selectedSemesterKey, setSelectedSemesterKey] = useState(getSelectedSemester);
@@ -113,10 +111,20 @@ export default function SettingsPage() {
     });
   }, [syncSections]);
 
-  const loadCronLog = useCallback(async () => {
+  const loadCronSchedule = useCallback(async () => {
     try {
-      const log: CronLog | null = await fetch(apiUrl('/api/classes/cron-log')).then((r) => r.json());
-      setCronLog(log);
+      const data: { schedule: CronSchedule; nextRun: string | null } =
+        await fetch(apiUrl('/api/classes/cron-schedule')).then((r) => r.json());
+      setScheduleDays(data.schedule.days);
+      setScheduleTime(`${String(data.schedule.hour).padStart(2, '0')}:${String(data.schedule.minute).padStart(2, '0')}`);
+      setNextRun(data.nextRun);
+    } catch { /* ignore */ }
+  }, []);
+
+  const loadNotifyEmail = useCallback(async () => {
+    try {
+      const data: { email: string | null } = await fetch(apiUrl('/api/classes/notify-email')).then((r) => r.json());
+      setEmailDraft(data.email || '');
     } catch { /* ignore */ }
   }, []);
 
@@ -124,13 +132,9 @@ export default function SettingsPage() {
     try {
       const classes: ClassRow[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
       const linked = classes.filter((c) => c.opalCourseUrl);
-      const sections = await Promise.all(
-        linked.map(async (cls) => {
-          const existing: Lecture[] = await fetch(apiUrl(`/api/classes/${cls.id}/lectures`)).then((r) => r.json()).catch(() => []);
-          return { classId: cls.id, className: cls.name, semester: cls.semester, year: cls.year, existing, newLectures: [] as NewLecture[] };
-        }),
-      );
-      setSyncSections(sections);
+      setSyncSections(linked.map((cls) => ({
+        classId: cls.id, className: cls.name, semester: cls.semester, year: cls.year, newLectures: [] as NewLecture[],
+      })));
     } catch { /* ignore */ }
   }, []);
 
@@ -152,8 +156,16 @@ export default function SettingsPage() {
   }, [semesterOptions, selectedSemesterKey]);
 
   useEffect(() => {
-    if (selectedSemesterKey) setSelectedSemester(selectedSemesterKey);
-  }, [selectedSemesterKey]);
+    if (!selectedSemesterKey) return;
+    setSelectedSemester(selectedSemesterKey);
+    const selected = semesterOptions.find((o) => o.key === selectedSemesterKey);
+    if (!selected) return;
+    fetch(apiUrl('/api/classes/active-semester'), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ semester: selected.semester, year: selected.year }),
+    }).catch(() => { /* ignore — cron falls back to unfiltered until this succeeds */ });
+  }, [selectedSemesterKey, semesterOptions]);
 
   const visibleSyncSections = useMemo(
     () => syncSections.filter((s) => `${s.semester}-${s.year}` === selectedSemesterKey),
@@ -162,9 +174,50 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadDataDir();
-    loadCronLog();
+    loadCronSchedule();
+    loadNotifyEmail();
     initSyncPanel();
-  }, [loadDataDir, loadCronLog, initSyncPanel]);
+  }, [loadDataDir, loadCronSchedule, loadNotifyEmail, initSyncPanel]);
+
+  const toggleScheduleDay = (day: number) => {
+    setScheduleDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]).sort((a, b) => a - b));
+  };
+
+  const saveSchedule = async () => {
+    if (!scheduleDays.length) { setScheduleMsg({ msg: 'יש לבחור לפחות יום אחד', error: true }); return; }
+    setSavingSchedule(true);
+    setScheduleMsg(null);
+    try {
+      const [hour, minute] = scheduleTime.split(':').map(Number);
+      const res = await fetch(apiUrl('/api/classes/cron-schedule'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days: scheduleDays, hour, minute }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setScheduleMsg({ msg: data.error || 'שגיאה', error: true }); return; }
+      setNextRun(data.nextRun);
+      setScheduleMsg({ msg: 'התזמון נשמר' });
+    } catch { setScheduleMsg({ msg: 'שגיאת רשת', error: true }); }
+    finally { setSavingSchedule(false); }
+  };
+
+  const saveNotifyEmail = async () => {
+    setSavingEmail(true);
+    setEmailMsg(null);
+    try {
+      const res = await fetch(apiUrl('/api/classes/notify-email'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailDraft }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setEmailMsg({ msg: data.error || 'שגיאה', error: true }); return; }
+      setEmailDraft(data.email);
+      setEmailMsg({ msg: 'הכתובת נשמרה' });
+    } catch { setEmailMsg({ msg: 'שגיאת רשת', error: true }); }
+    finally { setSavingEmail(false); }
+  };
 
   const pickDataDir = async () => {
     setPickingDir(true);
@@ -242,23 +295,15 @@ export default function SettingsPage() {
 
   const testAll = async () => { await Promise.all(MODELS.map((m) => testModel(m.key))); };
 
-  const cronInfoStr = cronLog
-    ? `הרצה אחרונה: ${new Date(cronLog.timestamp).toLocaleString('he-IL')} · ${cronLog.trigger === 'cron' ? 'קרון' : cronLog.trigger === 'retry' ? 'ניסיון חוזר' : 'ידני'} · נמצאו ${cronLog.found} · עובדו ${cronLog.queued}`
-    : null;
-
   return (
     <div className="page fade-in">
-      <FeatureHealthBanner />
-
       <div className="settings-grid">
         {/* Detect-new sync card */}
         <div className="set-card">
           <div className="set-card__h">
             <div>
               <div className="set-card__title">זיהוי הרצאות חדשות</div>
-              <div className="set-card__sub">
-                {cronInfoStr || 'בודק את אזור הקורס מדי 6 שעות'}
-              </div>
+              <div className="set-card__sub">בודק את אזור הקורס מול OPAL</div>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {semesterOptions.length > 0 && (
@@ -282,32 +327,95 @@ export default function SettingsPage() {
               <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
                 אין קורסים עם קישור OPAL לסמסטר הנבחר
               </div>
+            ) : visibleSyncSections.every((s) => s.newLectures.length === 0) ? (
+              <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                לא נמצאו הרצאות חדשות בבדיקה האחרונה
+              </div>
             ) : (
-              visibleSyncSections.map((s) => (
+              visibleSyncSections.filter((s) => s.newLectures.length > 0).map((s) => (
                 <div key={s.classId} style={{ marginBottom: 12 }}>
                   <div style={{ font: '600 0.85rem/1 var(--font-ui)', marginBottom: 6 }}>{s.className}</div>
-                  {s.existing.filter((l) => l.status !== 'summarized').map((l, i) => (
-                    <div key={l.id || i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
-                      <span style={{ color: 'var(--ink-2)' }}>{l.name}</span>
-                      <span style={{ color: STATUS_COLOR[l.status] || 'var(--muted)' }}>{STATUS_LABEL[l.status] || l.status}</span>
+                  <div style={{ font: '600 0.78rem/1 var(--font-ui)', color: 'var(--accent)', padding: '4px 0' }}>
+                    נוספו — {s.newLectures.length} הרצאות
+                  </div>
+                  {s.newLectures.map((l) => (
+                    <div key={l.id} style={{ display: 'flex', alignItems: 'center', padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
+                      <span style={{ flex: 1, color: 'var(--ink-2)' }}>{l.name}</span>
                     </div>
                   ))}
-                  {s.newLectures.length > 0 && (
-                    <>
-                      <div style={{ font: '600 0.78rem/1 var(--font-ui)', color: 'var(--accent)', padding: '8px 0 4px', borderTop: '1px dashed var(--line-2)', marginTop: 4 }}>
-                        נוספו — {s.newLectures.length} הרצאות
-                      </div>
-                      {s.newLectures.map((l) => (
-                        <div key={l.id} style={{ display: 'flex', alignItems: 'center', padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
-                          <span style={{ flex: 1, color: 'var(--ink-2)' }}>{l.name}</span>
-                        </div>
-                      ))}
-                    </>
-                  )}
                 </div>
               ))
             )}
 
+          </div>
+        </div>
+
+        {/* Schedule & notification card */}
+        <div className="set-card">
+          <div className="set-card__h">
+            <div>
+              <div className="set-card__title">תזמון בדיקה אוטומטית</div>
+              <div className="set-card__sub">
+                {nextRun ? `הרצה הבאה: ${new Date(nextRun).toLocaleString('he-IL')}` : '—'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 6 }}>ימים</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {DAY_LABELS.map((label, day) => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleScheduleDay(day)}
+                  className="btn btn--xs"
+                  style={scheduleDays.includes(day) ? { background: 'var(--accent)', color: '#fff' } : undefined}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>שעה</div>
+            <input
+              type="time"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              className="select-field"
+            />
+            <Button onClick={saveSchedule} disabled={savingSchedule}>
+              {savingSchedule ? 'שומר...' : 'שמור תזמון'}
+            </Button>
+          </div>
+          {scheduleMsg && (
+            <div style={{ marginTop: 8, fontSize: '0.82rem', color: scheduleMsg.error ? 'var(--danger)' : 'var(--good)' }}>
+              {scheduleMsg.msg}
+            </div>
+          )}
+
+          <div style={{ paddingTop: 14, marginTop: 14, borderTop: '1px solid var(--line)' }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 6 }}>שליחת סיכומים למייל</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="email"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                placeholder="you@example.com"
+                className="select-field select-field--full"
+                style={{ flex: 1 }}
+              />
+              <Button onClick={saveNotifyEmail} disabled={savingEmail}>
+                {savingEmail ? 'שומר...' : 'שמור'}
+              </Button>
+            </div>
+            {emailMsg && (
+              <div style={{ marginTop: 8, fontSize: '0.82rem', color: emailMsg.error ? 'var(--danger)' : 'var(--good)' }}>
+                {emailMsg.msg}
+              </div>
+            )}
           </div>
         </div>
 

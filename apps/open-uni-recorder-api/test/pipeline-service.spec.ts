@@ -242,6 +242,7 @@ describe('PipelineService (direct)', () => {
 
       expect(mockEmail.sendDetectionNotification).toHaveBeenCalledTimes(1);
       expect(mockEmail.sendDetectionNotification).toHaveBeenCalledWith(
+        null,
         expect.arrayContaining([
           expect.objectContaining({ className: 'OPAL Class', lectureName: 'New Lecture' }),
         ]),
@@ -264,6 +265,30 @@ describe('PipelineService (direct)', () => {
       await service.runFullPipeline();
 
       expect(mockDetect.detectNewLectures).not.toHaveBeenCalled();
+    });
+
+    it('checks classes from every semester when no active semester is set', async () => {
+      const clsA = storage.createClass({ name: 'A Class', semester: 'A', year: 2025 });
+      storage.updateClassMeta(clsA.id, { opalCourseUrl: 'https://opal.example.com/a' });
+      const clsB = storage.createClass({ name: 'B Class', semester: 'B', year: 2024 });
+      storage.updateClassMeta(clsB.id, { opalCourseUrl: 'https://opal.example.com/b' });
+
+      await service.runFullPipeline();
+
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledTimes(2);
+    });
+
+    it('only checks classes matching the active semester once one is set', async () => {
+      const clsA = storage.createClass({ name: 'A Class', semester: 'A', year: 2025 });
+      storage.updateClassMeta(clsA.id, { opalCourseUrl: 'https://opal.example.com/a' });
+      const clsB = storage.createClass({ name: 'B Class', semester: 'B', year: 2024 });
+      storage.updateClassMeta(clsB.id, { opalCourseUrl: 'https://opal.example.com/b' });
+      storage.setActiveSemester({ semester: 'A', year: 2025 });
+
+      await service.runFullPipeline();
+
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledTimes(1);
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(clsA.id, expect.any(Function));
     });
 
     it('does not throw when sendDetectionNotification rejects (fire-and-forget)', async () => {
