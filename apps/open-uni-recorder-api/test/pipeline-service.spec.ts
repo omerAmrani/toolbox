@@ -64,21 +64,33 @@ describe('PipelineService (direct)', () => {
   // ── resetStuckProcessing ───────────────────────────────────────────────────
 
   describe('resetStuckProcessing()', () => {
-    it('resets a processing lecture to failed with lastError', () => {
+    it('resets a stuck transcribing lecture to pending with lastError', () => {
       const cls = storage.createClass({ name: 'Test', semester: 'A', year: 2025 });
       const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
-      storage.updateLectureMeta(cls.id, lec.id, { status: 'processing' });
+      storage.updateLectureMeta(cls.id, lec.id, { status: 'transcribing' });
 
       service.resetStuckProcessing();
 
       const updated = storage.getLecture(cls.id, lec.id);
-      expect(updated.status).toBe('failed');
+      expect(updated.status).toBe('pending');
       expect(updated.lastError).toBe('Server restarted mid-job');
     });
 
-    it('leaves pending, done, and summarized lectures untouched', () => {
+    it('resets a stuck summarizing lecture to transcribed with lastError', () => {
       const cls = storage.createClass({ name: 'Test', semester: 'A', year: 2025 });
-      const statuses = ['pending', 'done', 'summarized'];
+      const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
+      storage.updateLectureMeta(cls.id, lec.id, { status: 'summarizing' });
+
+      service.resetStuckProcessing();
+
+      const updated = storage.getLecture(cls.id, lec.id);
+      expect(updated.status).toBe('transcribed');
+      expect(updated.lastError).toBe('Server restarted mid-job');
+    });
+
+    it('leaves pending, transcribed, and summarized lectures untouched', () => {
+      const cls = storage.createClass({ name: 'Test', semester: 'A', year: 2025 });
+      const statuses = ['pending', 'transcribed', 'summarized'];
       for (const status of statuses) {
         storage.createLecture(cls.id, { name: `L-${status}`, url: 'https://example.com', status });
       }
@@ -90,16 +102,28 @@ describe('PipelineService (direct)', () => {
       }
     });
 
-    it('handles multiple classes and resets only processing ones', () => {
+    it('resets a lecture with an unknown status to pending with lastError', () => {
+      const cls = storage.createClass({ name: 'Test', semester: 'A', year: 2025 });
+      const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
+      storage.updateLectureMeta(cls.id, lec.id, { status: 'bogus-status' });
+
+      service.resetStuckProcessing();
+
+      const updated = storage.getLecture(cls.id, lec.id);
+      expect(updated.status).toBe('pending');
+      expect(updated.lastError).toBe('Unknown status: bogus-status');
+    });
+
+    it('handles multiple classes and resets only stuck in-flight ones', () => {
       const cls1 = storage.createClass({ name: 'A', semester: 'A', year: 2025 });
       const cls2 = storage.createClass({ name: 'B', semester: 'A', year: 2025 });
       const stuck = storage.createLecture(cls1.id, { name: 'Stuck', url: 'https://example.com', status: 'pending' });
-      storage.updateLectureMeta(cls1.id, stuck.id, { status: 'processing' });
+      storage.updateLectureMeta(cls1.id, stuck.id, { status: 'transcribing' });
       const fine = storage.createLecture(cls2.id, { name: 'Fine', url: 'https://example.com', status: 'pending' });
 
       service.resetStuckProcessing();
 
-      expect(storage.getLecture(cls1.id, stuck.id).status).toBe('failed');
+      expect(storage.getLecture(cls1.id, stuck.id).status).toBe('pending');
       expect(storage.getLecture(cls2.id, fine.id).status).toBe('pending');
     });
   });
@@ -123,16 +147,16 @@ describe('PipelineService (direct)', () => {
       );
     });
 
-    it('marks lecture as done after successful run', async () => {
+    it('marks lecture as summarized after successful run', async () => {
       const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
       const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
 
       await service.runQueue();
 
-      expect(storage.getLecture(cls.id, lec.id).status).toBe('done');
+      expect(storage.getLecture(cls.id, lec.id).status).toBe('summarized');
     });
 
-    it('marks lecture as failed when download throws, resolves without throwing', async () => {
+    it('reverts lecture to pending when download throws, resolves without throwing', async () => {
       const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
       const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
       mockDownload.extractVideoUrl.mockRejectedValueOnce(new Error('Download failed'));
@@ -140,8 +164,21 @@ describe('PipelineService (direct)', () => {
       await expect(service.runQueue()).resolves.toBeUndefined();
 
       const updated = storage.getLecture(cls.id, lec.id);
-      expect(updated.status).toBe('failed');
+      expect(updated.status).toBe('pending');
       expect(updated.lastError).toBe('Download failed');
+      expect(mockEmail.sendLectureSummary).not.toHaveBeenCalled();
+    });
+
+    it('reverts lecture to transcribed when summarize throws', async () => {
+      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
+      const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
+      mockMergeSummaries.mockRejectedValueOnce(new Error('Summarize failed'));
+
+      await expect(service.runQueue()).resolves.toBeUndefined();
+
+      const updated = storage.getLecture(cls.id, lec.id);
+      expect(updated.status).toBe('transcribed');
+      expect(updated.lastError).toBe('Summarize failed');
       expect(mockEmail.sendLectureSummary).not.toHaveBeenCalled();
     });
 
@@ -175,14 +212,14 @@ describe('PipelineService (direct)', () => {
 
       await service.runQueue();
 
-      expect(storage.getLecture(cls.id, lec.id).status).toBe('failed');
+      expect(storage.getLecture(cls.id, lec.id).status).toBe('pending');
       expect(existsSync(mp3Path)).toBe(true);
     });
 
     it('skips non-pending lectures', async () => {
       const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
-      storage.createLecture(cls.id, { name: 'Skipped', url: 'https://example.com', status: 'skipped' });
-      storage.createLecture(cls.id, { name: 'Done', url: 'https://example.com', status: 'done' });
+      storage.createLecture(cls.id, { name: 'Transcribed', url: 'https://example.com', status: 'transcribed' });
+      storage.createLecture(cls.id, { name: 'Summarized', url: 'https://example.com', status: 'summarized' });
 
       await service.runQueue();
 

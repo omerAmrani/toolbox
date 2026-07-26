@@ -25,9 +25,10 @@ interface Lecture {
   name: string;
   lectureDate?: string | null;
   status: string;
+  lastError?: string | null;
 }
 
-const IN_FLIGHT = new Set(['transcribing', 'summarizing', 'processing']);
+const IN_FLIGHT = new Set(['transcribing', 'summarizing']);
 
 export default function ClassDetailPage() {
   const params = useParams<{ classId: string }>();
@@ -180,33 +181,6 @@ export default function ClassDetailPage() {
     }
   };
 
-  const retryLecture = async (lectureId: string) => {
-    const r = await fetch(
-      apiUrl(`/api/classes/${classId}/lectures/${lectureId}/retry`),
-      { method: 'POST' },
-    );
-    if (r.ok) {
-      showToast('הופעל מחדש');
-      loadLectures();
-    } else {
-      showToast('שגיאה', true);
-    }
-  };
-
-  const skipLecture = async (lectureId: string, currentStatus: string) => {
-    const route = currentStatus === 'skipped' ? 'unskip' : 'skip';
-    const r = await fetch(
-      apiUrl(`/api/classes/${classId}/lectures/${lectureId}/${route}`),
-      { method: 'POST' },
-    );
-    if (r.ok) {
-      showToast(route === 'skip' ? 'דולג' : 'הוחזר');
-      loadLectures();
-    } else {
-      showToast('שגיאה', true);
-    }
-  };
-
   const deleteLecture = async (lectureId: string) => {
     const ok = await deleteResource(`/api/classes/${classId}/lectures/${lectureId}`, 'למחוק את ההרצאה?');
     if (ok === null) return;
@@ -280,8 +254,7 @@ export default function ClassDetailPage() {
         <div className="timeline">
           {orderedLectures.map((l) => {
             const current = IN_FLIGHT.has(l.status);
-            const failed = l.status === 'failed' || l.status === 'error' || l.status === 'aborted';
-            const showProgress = l.status === 'transcribing' || l.status === 'summarizing' || l.status === 'processing';
+            const showProgress = l.status === 'transcribing' || l.status === 'summarizing';
             return (
               <div
                 key={l.id}
@@ -304,6 +277,12 @@ export default function ClassDetailPage() {
                       <span>{fmtDateLong(l.lectureDate)}</span>
                       <span style={{ opacity: 0.4 }}>·</span>
                       <Status s={l.status} />
+                      {l.lastError && (
+                        <>
+                          <span style={{ opacity: 0.4 }}>·</span>
+                          <span style={{ color: 'var(--error)' }}>{l.lastError}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="lec-card__actions" onClick={(e) => e.stopPropagation()}>
@@ -320,16 +299,6 @@ export default function ClassDetailPage() {
                     {l.status === 'transcribed' && (
                       <Button variant="primary" onClick={() => runSummarize(l.id)} title="סכם">
                         ▶ סכם
-                      </Button>
-                    )}
-                    {failed && (
-                      <Button onClick={() => retryLecture(l.id)} title="נסה שנית">
-                        ↻ נסה שנית
-                      </Button>
-                    )}
-                    {l.status === 'skipped' && (
-                      <Button onClick={() => skipLecture(l.id, l.status)} title="בטל דילוג">
-                        ↺ בטל דילוג
                       </Button>
                     )}
                     <Button

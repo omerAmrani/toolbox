@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { apiUrl, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
-import { SEMESTER_ORDER } from '@/lib/selectedSemester';
+import { sortBySemester } from '@/lib/selectedSemester';
 import NewCourseModal from '@/app/components/NewCourseModal';
 import { Button } from '@/app/components/Button';
 
@@ -74,17 +74,8 @@ export default function ClassesPage() {
   }, [classes]);
 
   const visible = useMemo(() => {
-    const list = [...(classes ?? [])];
-    list.sort((a, b) => {
-      const ya = a.year ?? 0;
-      const yb = b.year ?? 0;
-      if (yb !== ya) return yb - ya;
-      const sa = SEMESTER_ORDER[a.semester ?? ''] ?? 0;
-      const sb = SEMESTER_ORDER[b.semester ?? ''] ?? 0;
-      if (sb !== sa) return sb - sa;
-      return a.name.localeCompare(b.name, 'he');
-    });
-    return list;
+    const byName = [...(classes ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'he'));
+    return sortBySemester(byName);
   }, [classes]);
 
   return (
@@ -103,9 +94,7 @@ export default function ClassesPage() {
             const yr = c.year ? ` ${c.year}` : '';
             const meta = [sem + yr].filter(Boolean).join(' ');
             const lecs = lecturesByClass[c.id] ?? [];
-            const done = lecs.filter(
-              (l) => l.status === 'summarized' || l.status === 'done',
-            ).length;
+            const done = lecs.filter((l) => l.status === 'summarized').length;
             return (
               <article
                 key={c.id}

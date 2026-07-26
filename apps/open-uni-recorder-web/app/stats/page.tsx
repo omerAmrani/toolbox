@@ -17,6 +17,7 @@ interface LectureRow {
   id: string;
   status: string;
   lectureDate?: string | null;
+  lastError?: string | null;
 }
 
 function ComingSoon() {
@@ -75,20 +76,15 @@ export default function StatsPage() {
   );
 
   const total = allLectures.length;
-  const summarized = allLectures.filter(
-    (l) => l.status === 'summarized' || l.status === 'done',
-  ).length;
+  const summarized = allLectures.filter((l) => l.status === 'summarized').length;
   const summarizing = allLectures.filter((l) => l.status === 'summarizing').length;
   const transcribing = allLectures.filter((l) => l.status === 'transcribing').length;
-  const processing = allLectures.filter((l) => l.status === 'processing').length;
-  const transcribed = allLectures.filter((l) => l.status === 'transcribed').length;
+  const transcribed = allLectures.filter((l) => l.status === 'transcribed' && !l.lastError).length;
   const pending = allLectures.filter((l) => l.status === 'pending').length;
-  const errors = allLectures.filter(
-    (l) => l.status === 'error' || l.status === 'failed' || l.status === 'aborted',
-  ).length;
-  const skipped = allLectures.filter((l) => l.status === 'skipped').length;
+  const errors = allLectures.filter((l) => !!l.lastError).length;
+  const pendingNoError = allLectures.filter((l) => l.status === 'pending' && !l.lastError).length;
 
-  const inProcessing = summarizing + transcribing + processing;
+  const inProcessing = summarizing + transcribing;
 
   // ponytail: class-level archive removed, stats page is unreachable/deprecated anyway
   const classList = classes ?? [];
@@ -98,10 +94,9 @@ export default function StatsPage() {
   const distSegments = [
     { key: 'summarized', count: summarized, color: 'var(--st-summarized)', label: 'מסוכמות' },
     { key: 'summarizing', count: summarizing, color: 'var(--st-summarizing)', label: 'מסכם כעת' },
-    { key: 'transcribing', count: transcribing + processing, color: 'var(--st-transcribing)', label: 'מתמלל כעת' },
+    { key: 'transcribing', count: transcribing, color: 'var(--st-transcribing)', label: 'מתמלל כעת' },
     { key: 'transcribed', count: transcribed, color: 'var(--st-transcribed)', label: 'תומלל' },
-    { key: 'pending', count: pending, color: 'var(--line-2)', label: 'ממתין' },
-    { key: 'skipped', count: skipped, color: 'var(--muted)', label: 'דולג' },
+    { key: 'pending', count: pendingNoError, color: 'var(--line-2)', label: 'ממתין' },
     { key: 'error', count: errors, color: 'var(--st-error)', label: 'שגיאות' },
   ].filter((s) => s.count > 0);
 
@@ -160,8 +155,8 @@ export default function StatsPage() {
               <div className="stat-tile__n">{inProcessing}</div>
               <div className="stat-tile__sub">
                 {summarizing > 0 && `${summarizing} בסיכום`}
-                {summarizing > 0 && transcribing + processing > 0 && ' · '}
-                {transcribing + processing > 0 && `${transcribing + processing} בתמלול`}
+                {summarizing > 0 && transcribing > 0 && ' · '}
+                {transcribing > 0 && `${transcribing} בתמלול`}
                 {inProcessing === 0 && 'אין כרגע בעיבוד'}
               </div>
             </div>
@@ -284,22 +279,12 @@ export default function StatsPage() {
                 {classList.map((c) => {
                   const lecs = lecturesByClass[c.id] ?? [];
                   const tot = lecs.length;
-                  const done = lecs.filter(
-                    (l) => l.status === 'summarized' || l.status === 'done',
-                  ).length;
+                  const done = lecs.filter((l) => l.status === 'summarized').length;
                   const proc = lecs.filter(
-                    (l) =>
-                      l.status === 'summarizing' ||
-                      l.status === 'transcribing' ||
-                      l.status === 'processing',
+                    (l) => l.status === 'summarizing' || l.status === 'transcribing',
                   ).length;
-                  const err = lecs.filter(
-                    (l) =>
-                      l.status === 'error' ||
-                      l.status === 'failed' ||
-                      l.status === 'aborted',
-                  ).length;
-                  const wait = lecs.filter((l) => l.status === 'pending').length;
+                  const err = lecs.filter((l) => !!l.lastError).length;
+                  const wait = lecs.filter((l) => l.status === 'pending' && !l.lastError).length;
                   const sem = c.semester ? SEMESTER_HE[c.semester] || c.semester : '';
                   const yr = c.year ? ` ${c.year}` : '';
                   const meta = [sem + yr].filter(Boolean).join(' ');

@@ -53,11 +53,9 @@ export class LecturesController {
   @Post(':classId/lectures')
   createLecture(@Param('classId') classId: string, @Body() body: any, @Res() res: Response) {
     if (!this.storage.getClass(classId)) return res.status(404).json({ error: 'Class not found' });
-    const { name, url, lectureDate, status } = body;
+    const { name, url, lectureDate } = body;
     if (!name || !url) return res.status(400).json({ error: 'name and url required' });
-    const allowed = ['pending', 'skipped'];
-    const initialStatus = allowed.includes(status) ? status : 'pending';
-    res.status(201).json(this.storage.createLecture(classId, { name, url, lectureDate, status: initialStatus }));
+    res.status(201).json(this.storage.createLecture(classId, { name, url, lectureDate, status: 'pending' }));
   }
 
   @Delete(':classId/lectures/:lectureId')
@@ -74,32 +72,6 @@ export class LecturesController {
     if (name !== undefined) updates.name = name;
     if (lectureDate !== undefined) updates.lectureDate = lectureDate;
     res.json(this.storage.updateLectureMeta(classId, lectureId, updates));
-  }
-
-  // ── Retry / Skip / Unskip ─────────────────────────────────────────────────────
-
-  @Post(':classId/lectures/:lectureId/retry')
-  retryLecture(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
-    const lecture = this.requireLecture(classId, lectureId, res);
-    if (!lecture) return;
-    if (lecture.status !== 'failed') return res.status(400).json({ error: 'Only failed lectures can be retried' });
-    res.json(this.storage.updateLectureMeta(classId, lectureId, { status: 'pending', lastError: null, lastErrorAt: null, startedAt: null }));
-  }
-
-  @Post(':classId/lectures/:lectureId/skip')
-  skipLecture(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
-    const lecture = this.requireLecture(classId, lectureId, res);
-    if (!lecture) return;
-    if (lecture.status !== 'pending') return res.status(400).json({ error: 'Only pending lectures can be skipped' });
-    res.json(this.storage.updateLectureMeta(classId, lectureId, { status: 'skipped' }));
-  }
-
-  @Post(':classId/lectures/:lectureId/unskip')
-  unskipLecture(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
-    const lecture = this.requireLecture(classId, lectureId, res);
-    if (!lecture) return;
-    if (lecture.status !== 'skipped') return res.status(400).json({ error: 'Only skipped lectures can be unskipped' });
-    res.json(this.storage.updateLectureMeta(classId, lectureId, { status: 'pending' }));
   }
 
   // ── Status ───────────────────────────────────────────────────────────────────
@@ -190,7 +162,7 @@ export class LecturesController {
     const mp3Path = path.join(dir, 'audio.mp3');
 
     try {
-      this.storage.updateLectureMeta(classId, lectureId, { status: 'transcribing' });
+      this.storage.updateLectureMeta(classId, lectureId, { status: 'transcribing', lastError: null, lastErrorAt: null });
 
       broadcast({ type: 'progress', step: 'login', message: 'מתחבר לאוניברסיטה הפתוחה...' });
       const videoUrl = await this.download.extractVideoUrl(
@@ -212,7 +184,7 @@ export class LecturesController {
 
       writeFileSync(transcriptPath, transcript);
 
-      if (process.env.DELETE_MP3_AFTER_TRANSCRIBE === 'true' && existsSync(mp3Path)) {
+      if (existsSync(mp3Path)) {
         unlinkSync(mp3Path);
         console.log('[pipeline] deleted audio.mp3 after transcript saved');
       }
@@ -227,7 +199,11 @@ export class LecturesController {
       const aborted = controller.signal.aborted;
       if (aborted) console.log(`[transcribe] aborted: ${classId}/${lectureId}`);
       else console.error(`[transcribe] error: ${classId}/${lectureId}`, err.message);
-      this.storage.updateLectureMeta(classId, lectureId, { status: aborted ? 'aborted' : 'error' });
+      this.storage.updateLectureMeta(classId, lectureId, {
+        status: 'pending',
+        lastError: aborted ? 'בוטל על ידי המשתמש' : err.message,
+        lastErrorAt: new Date().toISOString(),
+      });
       broadcast({ type: aborted ? 'aborted' : 'error', message: err.message });
     } finally {
       this.lecturesService.activeJobs.delete(key);
@@ -265,7 +241,7 @@ export class LecturesController {
 
     try {
       console.log(`[summarize] starting: ${classId}/${lectureId} backend=${usedBackend}`);
-      this.storage.updateLectureMeta(classId, lectureId, { status: 'summarizing' });
+      this.storage.updateLectureMeta(classId, lectureId, { status: 'summarizing', lastError: null, lastErrorAt: null });
       const { mergeSummaries } = await this.summarizeService.getSummarizer(backend);
       const transcript = readFileSync(transcriptPath, 'utf8');
       send({ type: 'progress', step: 'summarize', message: 'מסכם...' });
@@ -295,7 +271,11 @@ export class LecturesController {
       const aborted = controller.signal.aborted;
       if (aborted) console.log(`[summarize] aborted: ${classId}/${lectureId}`);
       else console.error(`[summarize] error: ${classId}/${lectureId}`, err.message);
-      this.storage.updateLectureMeta(classId, lectureId, { status: aborted ? 'aborted' : 'error' });
+      this.storage.updateLectureMeta(classId, lectureId, {
+        status: 'transcribed',
+        lastError: aborted ? 'בוטל על ידי המשתמש' : err.message,
+        lastErrorAt: new Date().toISOString(),
+      });
       send({ type: aborted ? 'aborted' : 'error', message: err.message });
     } finally {
       const j = this.lecturesService.activeJobs.get(key);

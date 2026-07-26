@@ -82,8 +82,9 @@ export class PipelineController {
       try {
         send({ type: 'progress', message: `בודק: ${cls.name}...` });
         const newLectures = await this.detect.detectNewLectures(cls.id, (msg: string) => send({ type: 'progress', message: msg }));
-        results.push({ classId: cls.id, className: cls.name, newLectures });
-        send({ type: 'class', classId: cls.id, className: cls.name, newLectures });
+        const added = newLectures.map((lec: any) => this.storage.createLecture(cls.id, lec));
+        results.push({ classId: cls.id, className: cls.name, newLectures: added });
+        send({ type: 'class', classId: cls.id, className: cls.name, newLectures: added });
       } catch (err: any) {
         results.push({ classId: cls.id, className: cls.name, error: err.message });
         send({ type: 'class', classId: cls.id, className: cls.name, error: err.message, newLectures: [] });

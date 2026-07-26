@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { apiUrl } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
-import { SEMESTER_ORDER, useSelectedSemester } from '@/lib/selectedSemester';
+import { sortBySemester, useSelectedSemester } from '@/lib/selectedSemester';
 import NewCourseModal from '@/app/components/NewCourseModal';
 
 interface ClassRow {
@@ -34,17 +34,14 @@ export default function Sidebar() {
   }, []);
 
   const selectedSemesterKey = useSelectedSemester();
+  const sortedClasses = useMemo(() => sortBySemester(classes), [classes]);
   const semesterLabel = useMemo(() => {
-    const withSem = classes.filter((c) => c.semester && c.year);
+    const withSem = sortedClasses.filter((c) => c.semester && c.year);
     const match =
-      withSem.find((c) => `${c.semester}-${c.year}` === selectedSemesterKey) ??
-      [...withSem].sort((a, b) => {
-        if ((b.year ?? 0) !== (a.year ?? 0)) return (b.year ?? 0) - (a.year ?? 0);
-        return (SEMESTER_ORDER[b.semester ?? ''] ?? 0) - (SEMESTER_ORDER[a.semester ?? ''] ?? 0);
-      })[0];
+      withSem.find((c) => `${c.semester}-${c.year}` === selectedSemesterKey) ?? withSem[0];
     if (!match) return null;
     return `סמסטר ${SEMESTER_HE[match.semester!] || match.semester} ${match.year}`;
-  }, [classes, selectedSemesterKey]);
+  }, [sortedClasses, selectedSemesterKey]);
 
   const at = (path: string) => pathname === path;
 
@@ -90,7 +87,7 @@ export default function Sidebar() {
 
       <div className="sb__section">
         <div className="sb__label">הקורסים שלי</div>
-        {classes.map((c) => {
+        {sortedClasses.map((c) => {
           const href = `/classes/${c.id}`;
           const icon = c.name?.trim()?.[0] || '·';
           return (

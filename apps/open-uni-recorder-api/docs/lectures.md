@@ -9,20 +9,17 @@ Lecture lifecycle management: CRUD, status machine, transcription and summarizat
 
 **CRUD routes:**
 - `GET /api/classes/:classId/lectures` — list lectures for a class
-- `POST /api/classes/:classId/lectures` — create lecture (`name`, `url` required; `lectureDate`, `status` optional — only `pending`/`skipped` accepted)
+- `POST /api/classes/:classId/lectures` — create lecture (`name`, `url` required; `lectureDate` optional). Always starts at `pending`.
 - `PATCH /api/classes/:classId/lectures/:lectureId` — update `name` / `lectureDate`
 - `DELETE /api/classes/:classId/lectures/:lectureId` — delete lecture and all associated files
 - `GET /api/classes/:classId/lectures/:lectureId/status` — full lecture record
 
 **Status machine:**
-`pending` → `transcribing` → `transcribed` → `summarizing` → `summarized` → `done`
+`pending` → `transcribing` → `transcribed` → `summarizing` → `summarized`
 
-Also: `failed`, `aborted`, `skipped`, `error`. Retry resets `failed` → `pending`.
+Only these 5 statuses exist. A failure or user-abort during `transcribing`/`summarizing` doesn't move to a separate error status — it reverts to the state the lecture was in before that step started (`transcribing` → `pending`, `summarizing` → `transcribed`) and attaches `lastError` + `lastErrorAt`. The lecture is then retried simply by re-triggering the same action (transcribe/summarize) — there's no dedicated retry endpoint; a successful run clears `lastError`/`lastErrorAt`.
 
-**Lifecycle routes:**
-- `POST .../retry` — `failed` → `pending`
-- `POST .../skip` — `pending` → `skipped`
-- `POST .../unskip` — `skipped` → `pending`
+There is no `skipped` status — every lecture created (manually or via sync/cron detection) starts at `pending` and flows through the pipeline.
 
 **Transcribe (SSE):** `POST .../transcribe`
 - login to OPAL → extract video URL → download + ffmpeg → whisper → save `transcript.txt`

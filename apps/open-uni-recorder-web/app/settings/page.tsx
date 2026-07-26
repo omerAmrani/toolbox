@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiUrl } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
-import { Status } from '@/app/components/Status';
 import { Button } from '@/app/components/Button';
 import { Select } from '@/app/components/Select';
 import FeatureHealthBanner from '@/app/components/FeatureHealthBanner';
@@ -14,20 +13,6 @@ interface DataDirInfo {
   current: string;
   configured: string | null;
   hasDb: boolean;
-}
-
-interface QueueLecture {
-  classId: string;
-  className: string;
-  lectureId: string;
-  name: string;
-  status: string;
-  addedAt: string;
-}
-
-interface QueueData {
-  running: boolean;
-  lectures: QueueLecture[];
 }
 
 interface CronLog {
@@ -55,8 +40,10 @@ interface Lecture {
 }
 
 interface NewLecture {
+  id: string;
   name: string;
   url: string;
+  status: string;
   lectureDate?: string | null;
 }
 
@@ -84,50 +71,6 @@ const MODELS: { key: ModelKey; emoji: string; name: string; sub: string; role: s
   { key: 'claude', emoji: 'C', name: 'Claude', sub: 'Anthropic · claude-haiku-4-5-20251001', role: 'סיכומים' },
 ];
 
-// ponytail: SettingsToggle only used by the commented-out notifications card below
-// function SettingsToggle({ label, defaultOn }: { label: string; defaultOn?: boolean }) {
-//   const [on, setOn] = useState(!!defaultOn);
-//   return (
-//     <div
-//       style={{
-//         display: 'flex',
-//         justifyContent: 'space-between',
-//         alignItems: 'center',
-//         padding: '12px 0',
-//         borderBottom: '1px solid var(--line)',
-//         cursor: 'pointer',
-//       }}
-//       onClick={() => setOn(!on)}
-//     >
-//       <span style={{ fontSize: '0.9rem' }}>{label}</span>
-//       <span
-//         style={{
-//           width: 36,
-//           height: 20,
-//           background: on ? 'var(--ink)' : 'var(--line-2)',
-//           borderRadius: 999,
-//           position: 'relative',
-//           transition: 'background 0.15s',
-//           flexShrink: 0,
-//         }}
-//       >
-//         <span
-//           style={{
-//             position: 'absolute',
-//             insetBlockStart: 2,
-//             insetInlineEnd: on ? 2 : 18,
-//             width: 16,
-//             height: 16,
-//             background: 'var(--bg)',
-//             borderRadius: '50%',
-//             transition: 'inset-inline-end 0.15s',
-//           }}
-//         />
-//       </span>
-//     </div>
-//   );
-// }
-
 export default function SettingsPage() {
   const [dataDir, setDataDir] = useState<DataDirInfo | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState<string | null>(null);
@@ -138,9 +81,7 @@ export default function SettingsPage() {
   const [reloadMsg, setReloadMsg] = useState('');
   const [reloading, setReloading] = useState(false);
 
-  const [queue, setQueue] = useState<QueueData | null>(null);
   const [cronLog, setCronLog] = useState<CronLog | null>(null);
-  const queueRefreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [syncSections, setSyncSections] = useState<SyncSection[]>([]);
   const [selectedSemesterKey, setSelectedSemesterKey] = useState(getSelectedSemester);
@@ -171,28 +112,6 @@ export default function SettingsPage() {
       return (SEMESTER_ORDER[b.semester] ?? 0) - (SEMESTER_ORDER[a.semester] ?? 0);
     });
   }, [syncSections]);
-
-  const loadQueue = useCallback(async () => {
-    const selected = semesterOptions.find((o) => o.key === selectedSemesterKey);
-    const qs = selected ? `?semester=${selected.semester}&year=${selected.year}` : '';
-    const queueUrl = apiUrl(`/api/classes/queue${qs}`);
-    try {
-      const data: QueueData = await fetch(queueUrl).then((r) => r.json());
-      setQueue(data);
-      const anyProcessing = data.lectures.some((l) => l.status === 'processing');
-      if (anyProcessing && !queueRefreshTimer.current) {
-        queueRefreshTimer.current = setInterval(async () => {
-          try {
-            const d: QueueData = await fetch(queueUrl).then((r) => r.json());
-            setQueue(d);
-            if (!d.lectures.some((l) => l.status === 'processing')) {
-              if (queueRefreshTimer.current) { clearInterval(queueRefreshTimer.current); queueRefreshTimer.current = null; }
-            }
-          } catch { /* ignore */ }
-        }, 3000);
-      }
-    } catch { /* ignore */ }
-  }, [semesterOptions, selectedSemesterKey]);
 
   const loadCronLog = useCallback(async () => {
     try {
@@ -246,13 +165,6 @@ export default function SettingsPage() {
     loadCronLog();
     initSyncPanel();
   }, [loadDataDir, loadCronLog, initSyncPanel]);
-
-  useEffect(() => {
-    loadQueue();
-    return () => {
-      if (queueRefreshTimer.current) { clearInterval(queueRefreshTimer.current); queueRefreshTimer.current = null; }
-    };
-  }, [loadQueue]);
 
   const pickDataDir = async () => {
     setPickingDir(true);
@@ -311,53 +223,6 @@ export default function SettingsPage() {
     } finally { setSyncing(false); }
   };
 
-  const queueLectureItem = async (classId: string, idx: number) => {
-    const section = syncSections.find((s) => s.classId === classId);
-    const lecture = section?.newLectures[idx];
-    if (!lecture) return;
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: lecture.name, url: lecture.url, lectureDate: lecture.lectureDate }),
-    });
-    if (r.ok) {
-      setSyncSections((prev) =>
-        prev.map((s) =>
-          s.classId === classId
-            ? { ...s, newLectures: s.newLectures.filter((_, i) => i !== idx), existing: [...s.existing, { id: '', name: lecture.name, status: 'pending', lectureDate: lecture.lectureDate || null }] }
-            : s,
-        ),
-      );
-      // starts immediately if idle; no-ops server-side if a lecture is already processing
-      await fetch(apiUrl('/api/classes/run-queue'), { method: 'POST' });
-      loadQueue();
-    }
-  };
-
-  const skipLectureItem = async (classId: string, idx: number) => {
-    const section = syncSections.find((s) => s.classId === classId);
-    const lecture = section?.newLectures[idx];
-    if (!lecture) return;
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures`), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: lecture.name, url: lecture.url, lectureDate: lecture.lectureDate, status: 'skipped' }),
-    });
-    if (r.ok) {
-      setSyncSections((prev) => prev.map((s) => s.classId === classId ? { ...s, newLectures: s.newLectures.filter((_, i) => i !== idx) } : s));
-    }
-  };
-
-  const skipFromQueue = async (classId: string, lectureId: string) => {
-    const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/skip`), { method: 'POST' });
-    if (r.ok) loadQueue();
-  };
-
-  const triggerPipeline = async () => {
-    await fetch(apiUrl('/api/classes/run-queue'), { method: 'POST' });
-    await loadQueue();
-  };
-
   const testModel = async (key: ModelKey) => {
     setModels((m) => ({ ...m, [key]: { status: 'testing', msg: 'שולח בקשה...' } }));
     try {
@@ -380,8 +245,6 @@ export default function SettingsPage() {
   const cronInfoStr = cronLog
     ? `הרצה אחרונה: ${new Date(cronLog.timestamp).toLocaleString('he-IL')} · ${cronLog.trigger === 'cron' ? 'קרון' : cronLog.trigger === 'retry' ? 'ניסיון חוזר' : 'ידני'} · נמצאו ${cronLog.found} · עובדו ${cronLog.queued}`
     : null;
-
-  const pendingQueue = queue?.lectures.filter((l) => l.status === 'pending') || [];
 
   return (
     <div className="page fade-in">
@@ -423,7 +286,7 @@ export default function SettingsPage() {
               visibleSyncSections.map((s) => (
                 <div key={s.classId} style={{ marginBottom: 12 }}>
                   <div style={{ font: '600 0.85rem/1 var(--font-ui)', marginBottom: 6 }}>{s.className}</div>
-                  {s.existing.filter((l) => !['summarized', 'done', 'skipped'].includes(l.status)).map((l, i) => (
+                  {s.existing.filter((l) => l.status !== 'summarized').map((l, i) => (
                     <div key={l.id || i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
                       <span style={{ color: 'var(--ink-2)' }}>{l.name}</span>
                       <span style={{ color: STATUS_COLOR[l.status] || 'var(--muted)' }}>{STATUS_LABEL[l.status] || l.status}</span>
@@ -432,13 +295,11 @@ export default function SettingsPage() {
                   {s.newLectures.length > 0 && (
                     <>
                       <div style={{ font: '600 0.78rem/1 var(--font-ui)', color: 'var(--accent)', padding: '8px 0 4px', borderTop: '1px dashed var(--line-2)', marginTop: 4 }}>
-                        חדש — {s.newLectures.length} הרצאות
+                        נוספו — {s.newLectures.length} הרצאות
                       </div>
-                      {s.newLectures.map((l, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
+                      {s.newLectures.map((l) => (
+                        <div key={l.id} style={{ display: 'flex', alignItems: 'center', padding: '6px 0', borderTop: '1px dashed var(--line-2)', fontSize: '0.85rem' }}>
                           <span style={{ flex: 1, color: 'var(--ink-2)' }}>{l.name}</span>
-                          <Button variant="primary" size="xs" onClick={() => queueLectureItem(s.classId, i)}>+ הוסף</Button>
-                          <Button size="xs" onClick={() => skipLectureItem(s.classId, i)}>דלג</Button>
                         </div>
                       ))}
                     </>
@@ -449,21 +310,6 @@ export default function SettingsPage() {
 
           </div>
         </div>
-
-        {/* ponytail: notifications placeholder commented out, not removed
-        <div className="set-card">
-          <div className="set-card__h">
-            <div>
-              <div className="set-card__title">התראות</div>
-              <div className="set-card__sub">איך לקבל עדכון על סיכומים חדשים</div>
-            </div>
-          </div>
-          <SettingsToggle label="מייל בסיום סיכום" defaultOn />
-          <SettingsToggle label="התראת מערכת בכישלון" defaultOn />
-          <SettingsToggle label="סיכום שבועי במייל" />
-          <SettingsToggle label="התראת WhatsApp (ניסיוני)" />
-        </div>
-        */}
 
         {/* Storage card */}
         <div className="set-card">
@@ -512,34 +358,6 @@ export default function SettingsPage() {
               <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--muted)' }}>{reloadMsg}</div>
             )}
           </div>
-        </div>
-
-        {/* Queue card */}
-        <div className="set-card">
-          <div className="set-card__h">
-            <div>
-              <div className="set-card__title">תור עיבוד</div>
-              <div className="set-card__sub">{pendingQueue.length} הרצאות ממתינות</div>
-            </div>
-            <Button variant="primary" onClick={triggerPipeline} disabled={queue?.running}>
-              {queue?.running ? 'פועל...' : '▶ הפעל תור'}
-            </Button>
-          </div>
-
-          {pendingQueue.length === 0 ? (
-            <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>התור ריק</div>
-          ) : (
-            pendingQueue.map((l) => (
-              <div key={l.lectureId} className="queue-row">
-                <div className="queue-row__class">{l.className}</div>
-                <div className="queue-row__name">{l.name}</div>
-                <Status s={l.status} />
-                <Button size="xs" onClick={() => skipFromQueue(l.classId, l.lectureId)}>
-                  דלג
-                </Button>
-              </div>
-            ))
-          )}
         </div>
 
         {/* AI Models — full width */}

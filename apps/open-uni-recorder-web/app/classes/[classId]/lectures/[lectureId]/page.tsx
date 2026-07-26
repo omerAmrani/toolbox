@@ -304,16 +304,6 @@ export default function LecturePage() {
     showToast('הועתק');
   };
 
-  const downloadMd = () => {
-    if (!summary) return;
-    const blob = new Blob([summary], { type: 'text/markdown' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'summary.md';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
   const viewSummary = async (summaryId: string) => {
     if (summaryId === history.currentSummary) {
       setViewedSummaryId(null);
@@ -435,11 +425,6 @@ export default function LecturePage() {
               </Button>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {activeView === 'summary' && (
-                <Button icon onClick={downloadMd} disabled={!summary} title="ייצוא">
-                  ⬇
-                </Button>
-              )}
               <Button
                 icon
                 onClick={copyActive}

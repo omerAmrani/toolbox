@@ -18,13 +18,13 @@ No dedicated stats endpoint exists. All metrics are computed client-side.
 
 | Metric | Derivation |
 |--------|-----------|
-| Summarized | `status === 'summarized' \| 'done'` |
-| In processing | `status === 'summarizing' \| 'transcribing' \| 'processing'` |
+| Summarized | `status === 'summarized'` |
+| In processing | `status === 'summarizing' \| 'transcribing'` |
 | Pending | `status === 'pending'` |
-| Errors | `status === 'error' \| 'failed' \| 'aborted'` |
+| Errors | `!!lastError` (independent of status — a `pending`/`transcribed` lecture can carry a `lastError` from a prior failed attempt) |
 | Active classes | classes not in `localStorage our:class:<id>:archived` |
 | Weekly activity | grouped counts of `lectureDate` over last 8 weeks |
-| Per-class progress | done/total + in-flight/error/pending breakdown bar |
+| Per-class progress | done/total + in-flight/error/pending breakdown bar (pending and error are mutually exclusive in the bar — a pending lecture with `lastError` counts as error, not pending) |
 | Status distribution | segmented bar across all lecture statuses |
 
 ## Placeholder tiles (בקרוב)

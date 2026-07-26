@@ -12,7 +12,7 @@ Downloads a lecture video from OPAL and transcribes it to text using Whisper.
 2. `DownloadService.downloadAndTranscribe()` — downloads video, converts to `audio.mp3` via ffmpeg, runs Whisper
 3. Saves result to `transcript.txt` in the lecture data directory
 4. Sets lecture status: `transcribing` → `transcribed`
-5. If `DELETE_MP3_AFTER_TRANSCRIBE=true`, deletes `audio.mp3` after saving transcript
+5. Deletes `audio.mp3` after saving transcript
 
 **Backend:** Groq Whisper API (`whisper-large-v3-turbo`, requires `GROQ_API_KEY`). Retries up to 5× on rate limits with exponential backoff.
 

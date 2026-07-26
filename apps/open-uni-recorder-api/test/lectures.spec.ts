@@ -122,15 +122,7 @@ describe('LecturesController', () => {
       expect(res.body.id).toBeDefined();
     });
 
-    it('creates lecture with skipped status when requested', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L2', url: 'https://example.com/2', status: 'skipped' });
-      expect(res.status).toBe(201);
-      expect(res.body.status).toBe('skipped');
-    });
-
-    it('ignores invalid status and defaults to pending', async () => {
+    it('ignores client-supplied status and always defaults to pending', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L3', url: 'https://example.com/3', status: 'summarized' });
@@ -194,69 +186,6 @@ describe('LecturesController', () => {
       const res = await request(app.getHttpServer())
         .get(`/api/classes/${classId}/lectures/bad/status`);
       expect(res.status).toBe(404);
-    });
-  });
-
-  describe('POST .../skip and .../unskip', () => {
-    it('skips a pending lecture', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-      const id = created.body.id;
-
-      const skip = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/skip`);
-      expect(skip.status).toBe(201);
-      expect(skip.body.status).toBe('skipped');
-    });
-
-    it('returns 400 when skipping a non-pending lecture', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com', status: 'skipped' });
-
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${created.body.id}/skip`);
-      expect(res.status).toBe(400);
-    });
-
-    it('unskips a skipped lecture back to pending', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com', status: 'skipped' });
-      const id = created.body.id;
-
-      const unskip = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/unskip`);
-      expect(unskip.status).toBe(201);
-      expect(unskip.body.status).toBe('pending');
-    });
-  });
-
-  describe('POST .../retry', () => {
-    it('returns 400 when lecture is not failed', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${created.body.id}/retry`);
-      expect(res.status).toBe(400);
-    });
-
-    it('retries a failed lecture back to pending', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-      const id = created.body.id;
-
-      storage.updateLectureMeta(classId, id, { status: 'failed', lastError: 'boom' });
-
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/retry`);
-      expect(res.status).toBe(201);
-      expect(res.body.status).toBe('pending');
-      expect(res.body.lastError).toBeNull();
     });
   });
 
@@ -358,6 +287,35 @@ describe('LecturesController', () => {
         .get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('summarized');
     });
+
+    it('reverts status to transcribed with lastError when summarization throws', async () => {
+      const created = await request(app.getHttpServer())
+        .post(`/api/classes/${classId}/lectures`)
+        .send({ name: 'L', url: 'https://example.com' });
+      const id = created.body.id;
+
+      const dir = storage.lectureDirPath(classId, id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, 'transcript.txt'), 'Test transcript');
+
+      mockSummarize.getSummarizer.mockResolvedValueOnce({
+        mergeSummaries: jest.fn().mockRejectedValue(new Error('Summarizer failed')),
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/classes/${classId}/lectures/${id}/summarize`)
+        .buffer(true)
+        .parse((response, callback) => {
+          let data = '';
+          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          response.on('end', () => callback(null, data));
+        });
+
+      const statusRes = await request(app.getHttpServer())
+        .get(`/api/classes/${classId}/lectures/${id}/status`);
+      expect(statusRes.body.status).toBe('transcribed');
+      expect(statusRes.body.lastError).toBe('Summarizer failed');
+    });
   });
 
   // ── Q&A ────────────────────────────────────────────────────────────────────
@@ -452,7 +410,7 @@ describe('LecturesController', () => {
       expect(statusRes.body.status).toBe('transcribed');
     });
 
-    it('streams error event and sets status to error when download throws', async () => {
+    it('streams error event and reverts status to pending with lastError when download throws', async () => {
       const created = await request(app.getHttpServer())
         .post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
@@ -476,7 +434,8 @@ describe('LecturesController', () => {
 
       const statusRes = await request(app.getHttpServer())
         .get(`/api/classes/${classId}/lectures/${id}/status`);
-      expect(statusRes.body.status).toBe('error');
+      expect(statusRes.body.status).toBe('pending');
+      expect(statusRes.body.lastError).toBe('Login failed');
     });
   });
 

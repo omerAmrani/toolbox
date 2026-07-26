@@ -21,7 +21,7 @@
 - One markdown/text pane. There's no promote/"set as current" mechanism — the backend always treats the newest surviving summary version as the one `GET .../summary` returns, and the page always defaults to that on load
 - The `<select>` of all summary versions (backend label + generation-order number, e.g. "Claude #2") is a pure viewer: picking one just fetches that version's text (`GET .../summaries/:id`, read-only) into the pane via local `viewedSummaryId` state — it does not change which version is latest, and resets back to the latest on next page load
 - "תמלול" toggles the pane to the raw `transcript.txt` (lazy-loaded on first switch) and back to the summary on a second click
-- Toolbar row (same line as the picker), icon-only buttons right-to-left: ⬇ export downloads the current summary as `summary.md` (summary view only); 📋 copy copies whichever content is currently shown (summary or transcript); 🗑 delete removes whichever summary version is currently selected (summary view only) — if that was the latest, the next-newest remaining version becomes latest
+- Toolbar row (same line as the picker), icon-only buttons right-to-left: 📋 copy copies whichever content is currently shown (summary or transcript); 🗑 delete removes whichever summary version is currently selected (summary view only) — if that was the latest, the next-newest remaining version becomes latest
 - Re-summarize button with backend picker (`BackendSelect`); re-transcribe re-runs full transcription (no test-mode variant)
 
 **Gotcha:** summary streaming uses a buffer ref (`streamBufferRef`) to accumulate tokens before rendering, avoiding excessive re-renders during fast token streams.

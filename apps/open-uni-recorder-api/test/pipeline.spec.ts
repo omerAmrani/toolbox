@@ -78,7 +78,7 @@ describe('PipelineController', () => {
     it('includes all lectures across all classes', async () => {
       const cls = storage.createClass({ name: 'Math', semester: 'A', year: 2025 });
       storage.createLecture(cls.id, { name: 'L1', url: 'https://example.com', status: 'pending' });
-      storage.createLecture(cls.id, { name: 'L2', url: 'https://example.com', status: 'failed' });
+      storage.createLecture(cls.id, { name: 'L2', url: 'https://example.com', status: 'transcribed' });
 
       const res = await request(app.getHttpServer()).get('/api/classes/queue');
       expect(res.status).toBe(200);
@@ -185,6 +185,32 @@ describe('PipelineController', () => {
       const classEvent = events.find((e: any) => e.type === 'class');
       expect(classEvent.error).toBe('Network error');
       expect(classEvent.newLectures).toEqual([]);
+    });
+
+    it('creates detected lectures immediately as pending and returns the created records', async () => {
+      const cls = storage.createClass({ name: 'OPAL Class', semester: 'A', year: 2025 });
+      storage.updateClassMeta(cls.id, { opalCourseUrl: 'https://opal.example.com/course/3' });
+      mockDetect.detectNewLectures.mockResolvedValueOnce([
+        { name: 'New Lecture', url: 'https://example.com/new', lectureDate: '2025-01-01' },
+      ]);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/classes/sync')
+        .buffer(true)
+        .parse((response, callback) => {
+          let data = '';
+          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          response.on('end', () => callback(null, data));
+        });
+
+      const events = parseSSE(typeof res.body === 'string' ? res.body : res.text);
+      const classEvent = events.find((e: any) => e.type === 'class');
+      expect(classEvent.newLectures).toHaveLength(1);
+      expect(classEvent.newLectures[0]).toMatchObject({ name: 'New Lecture', status: 'pending' });
+
+      const lectures = storage.getLectures(cls.id);
+      expect(lectures).toHaveLength(1);
+      expect(lectures[0]).toMatchObject({ name: 'New Lecture', status: 'pending' });
     });
 
     it('only checks classes matching the given semester and year', async () => {

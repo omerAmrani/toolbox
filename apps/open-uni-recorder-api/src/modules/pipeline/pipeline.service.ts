@@ -56,11 +56,23 @@ export class PipelineService {
   // ── Startup recovery ──────────────────────────────────────────────────────────
 
   resetStuckProcessing(): void {
+    const revertTo: Record<string, string> = { transcribing: 'pending', summarizing: 'transcribed' };
+    const knownStatuses = new Set(['pending', 'transcribing', 'transcribed', 'summarizing', 'summarized']);
     for (const cls of this.storage.getClasses()) {
       for (const lecture of this.storage.getLectures(cls.id)) {
-        if (lecture.status === 'processing') {
+        if (!knownStatuses.has(lecture.status)) {
           this.storage.updateLectureMeta(cls.id, lecture.id, {
-            status: 'failed',
+            status: 'pending',
+            lastError: `Unknown status: ${lecture.status}`,
+            lastErrorAt: new Date().toISOString(),
+          });
+          console.log(`[pipeline] reset unknown-status lecture: ${cls.id}/${lecture.id} (${lecture.status})`);
+          continue;
+        }
+        const reverted = revertTo[lecture.status];
+        if (reverted) {
+          this.storage.updateLectureMeta(cls.id, lecture.id, {
+            status: reverted,
             lastError: 'Server restarted mid-job',
             lastErrorAt: new Date().toISOString(),
           });
@@ -100,9 +112,10 @@ export class PipelineService {
         const controller = new AbortController();
         const abortKey = `${classId}/${lectureId}:transcribe`;
         this.activeAbortControllers.set(abortKey, controller);
+        let phase: 'transcribe' | 'summarize' = 'transcribe';
 
         try {
-          this.storage.updateLectureMeta(classId, lectureId, { status: 'processing', startedAt: new Date().toISOString() });
+          this.storage.updateLectureMeta(classId, lectureId, { status: 'transcribing', startedAt: new Date().toISOString() });
           onProgress(`מתחיל: ${lecture.name}`);
 
           if (!existsSync(transcriptPath)) {
@@ -114,16 +127,26 @@ export class PipelineService {
             this.storage.updateLectureMeta(classId, lectureId, { whisperBackend: 'groq-whisper' });
           }
 
+          this.storage.updateLectureMeta(classId, lectureId, {
+            status: 'transcribed',
+            lastError: null,
+            lastErrorAt: null,
+          });
+          phase = 'summarize';
+
           const transcript = readFileSync(transcriptPath, 'utf8');
           if (!transcript.trim()) throw new Error('תמלול ריק — לא ניתן לסכם');
+          this.storage.updateLectureMeta(classId, lectureId, { status: 'summarizing' });
           const { mergeSummaries } = await this.summarize.getSummarizer();
           const summary = await mergeSummaries([transcript], onProgress, () => {});
           this.storage.saveSummaryVersion(classId, lectureId, summary, SUMMARIZE_BACKEND!);
 
           this.storage.updateLectureMeta(classId, lectureId, {
-            status: 'done',
+            status: 'summarized',
             summarizedAt: new Date().toISOString(),
             summarizeBackend: SUMMARIZE_BACKEND,
+            lastError: null,
+            lastErrorAt: null,
           });
           onProgress(`הושלם: ${lecture.name}`);
           console.log(`[pipeline] done: ${classId}/${lectureId}`);
@@ -137,12 +160,13 @@ export class PipelineService {
           }).catch((err: any) => console.warn('[email] failed to send:', err.message));
         } catch (err: any) {
           const aborted = controller.signal.aborted;
+          const revertStatus = phase === 'transcribe' ? 'pending' : 'transcribed';
           if (aborted) console.log(`[pipeline] aborted: ${classId}/${lectureId}`);
           else console.error(`[pipeline] failed ${classId}/${lectureId}:`, err.message);
           this.storage.updateLectureMeta(classId, lectureId, {
-            status: aborted ? 'aborted' : 'failed',
-            lastError: aborted ? null : err.message,
-            lastErrorAt: aborted ? null : new Date().toISOString(),
+            status: revertStatus,
+            lastError: aborted ? 'בוטל על ידי המשתמש' : err.message,
+            lastErrorAt: new Date().toISOString(),
           });
           onProgress(aborted ? `בוטל: ${lecture.name}` : `שגיאה: ${lecture.name} — ${err.message}`);
         } finally {
