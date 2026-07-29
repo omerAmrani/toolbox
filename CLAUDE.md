@@ -4,8 +4,9 @@ Personal platform containing productivity and utility apps.
 
 ## Structure
 
-- apps/open-uni-recorder-api — NestJS API, lecture processor (Groq/Gemini/Claude/Ollama), SQLite
-- apps/open-uni-recorder-web — Next.js 15 web UI for the above
+- apps/open-uni/api — NestJS API, lecture processor (Groq/Gemini/Claude/Ollama), SQLite
+- apps/open-uni/web — Next.js 15 web UI for the above
+- apps/open-uni/tray — macOS tray app (Swift)
 - packages/ui — shared React components (stub, promote when a second app exists)
 - packages/config — shared ESLint configs (`eslint/base|next|react-internal`) and tsconfig presets (`tsconfig/base|nextjs|react-library`)
 

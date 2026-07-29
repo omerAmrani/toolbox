@@ -42,6 +42,9 @@ recorder-db/
 apps/recorder-db/
 temp-db/
 
+# Swift build artifacts
+.build/
+
 # Misc
 .DS_Store
 *.pem

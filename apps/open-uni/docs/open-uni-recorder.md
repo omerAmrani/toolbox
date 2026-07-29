@@ -6,44 +6,46 @@ Personal tool for automatically detecting, downloading, transcribing, and summar
 
 **Local dev:** `turbo run dev --filter=@toolbox/open-uni-recorder-api` and `turbo run dev --filter=@toolbox/open-uni-recorder-web`
 
+**Local service (non-dev):** a macOS menu bar app runs both as production child processes without a terminal — see [local-service.md](local-service.md).
+
 ---
 
 ## Features
 
 - **Classes** — organize lectures by course, optional semester/year metadata
-  - API: [classes.md](../apps/open-uni-recorder-api/docs/classes.md)
-  - Web: [classes.md](../apps/open-uni-recorder-web/docs/classes.md)
+  - API: [classes.md](../api/docs/classes.md)
+  - Web: [classes.md](../web/docs/classes.md)
 
 - **Transcription** — download lecture video from OPAL and transcribe with Whisper
-  - API: [transcribe.md](../apps/open-uni-recorder-api/docs/transcribe.md)
-  - Web: [lectures.md](../apps/open-uni-recorder-web/docs/lectures.md)
+  - API: [transcribe.md](../api/docs/transcribe.md)
+  - Web: [lectures.md](../web/docs/lectures.md)
 
 - **Summarization** — generate AI summary from transcript; multiple backends, versioned history
-  - API: [summarize.md](../apps/open-uni-recorder-api/docs/summarize.md)
-  - Web: [lectures.md](../apps/open-uni-recorder-web/docs/lectures.md)
+  - API: [summarize.md](../api/docs/summarize.md)
+  - Web: [lectures.md](../web/docs/lectures.md)
 
 - **Q&A** — generate comprehension questions from a summary and evaluate answers (Claude only)
-  - API: [qa.md](../apps/open-uni-recorder-api/docs/qa.md)
-  - Web: [lectures.md](../apps/open-uni-recorder-web/docs/lectures.md)
+  - API: [qa.md](../api/docs/qa.md)
+  - Web: [lectures.md](../web/docs/lectures.md)
 
 - **OPAL detection** — auto-detect new lectures from an OPAL course page via Playwright
-  - API: [detect.md](../apps/open-uni-recorder-api/docs/detect.md)
-  - Web: [settings.md](../apps/open-uni-recorder-web/docs/settings.md)
+  - API: [detect.md](../api/docs/detect.md)
+  - Web: [settings.md](../web/docs/settings.md)
 
 - **Pipeline** — automated queue: detect → transcribe → summarize → email, cron-triggered
-  - API: [pipeline.md](../apps/open-uni-recorder-api/docs/pipeline.md)
+  - API: [pipeline.md](../api/docs/pipeline.md)
 
 - **Email notifications** — send summary email via Gmail on pipeline completion or on demand
-  - API: [email.md](../apps/open-uni-recorder-api/docs/email.md)
-  - Web: [settings.md](../apps/open-uni-recorder-web/docs/settings.md)
+  - API: [email.md](../api/docs/email.md)
+  - Web: [settings.md](../web/docs/settings.md)
 
 - **Transcript search** — full-text search across transcripts within a class
-  - API: [search.md](../apps/open-uni-recorder-api/docs/search.md)
-  - Web: [classes.md](../apps/open-uni-recorder-web/docs/classes.md)
+  - API: [search.md](../api/docs/search.md)
+  - Web: [classes.md](../web/docs/classes.md)
 
 - **Health checks** — test AI backend connectivity and latency
-  - API: [health.md](../apps/open-uni-recorder-api/docs/health.md)
-  - Web: [settings.md](../apps/open-uni-recorder-web/docs/settings.md)
+  - API: [health.md](../api/docs/health.md)
+  - Web: [settings.md](../web/docs/settings.md)
 
 - **Settings** — data directory config, queue monitor, disk reload, archive of skipped lectures
-  - Web: [settings.md](../apps/open-uni-recorder-web/docs/settings.md)
+  - Web: [settings.md](../web/docs/settings.md)

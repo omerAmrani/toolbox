@@ -35,8 +35,8 @@ pnpm install
 pnpm --filter @toolbox/open-uni-recorder-api exec playwright install chromium
 
 # Configure environment
-cp apps/open-uni-recorder-api/.env.example apps/open-uni-recorder-api/.env
-cp apps/open-uni-recorder-web/.env.example apps/open-uni-recorder-web/.env
+cp apps/open-uni/api/.env.example apps/open-uni/api/.env
+cp apps/open-uni/web/.env.example apps/open-uni/web/.env
 # Fill in your credentials and API keys in both .env files
 
 # Start both apps
@@ -50,8 +50,10 @@ API: http://localhost:3001
 
 ```
 apps/
-  open-uni-recorder-api/   NestJS API
-  open-uni-recorder-web/   Next.js web UI
+  open-uni/
+    api/                   NestJS API
+    web/                   Next.js web UI
+    tray/                  macOS tray app (Swift)
 packages/
   config/                  Shared ESLint + tsconfig presets
   ui/                      Shared React components (stub)

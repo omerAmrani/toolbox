@@ -11,6 +11,11 @@ Routes:
 - `GET /health/gemini`
 - `GET /health/claude`
 - `GET /health/features`
+- `GET /health/ping`
+
+### `/health/ping`
+
+Lightweight liveness check for the tray app to poll (see `apps/open-uni/docs/local-service.md`) — no auth, no external calls, no DB access. Response: `{ ok: true }`, always 200 if the process is up.
 
 ### `/health/gemini` and `/health/claude`
 

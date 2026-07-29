@@ -19,7 +19,7 @@ export const {
   GMAIL_USER,
   GMAIL_APP_PASSWORD,
   PORT = '3001',
-  WEB_ORIGIN = 'http://localhost:3000',
+  WEB_ORIGIN = 'http://127.0.0.1:3002',
 } = process.env;
 
 export const MERGE_MAX_TOKENS = 16384;

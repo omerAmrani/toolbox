@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev -p 3002",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -H 127.0.0.1 -p 3002",
     "lint": "next lint",
     "check-types": "tsc --noEmit",
     "test:e2e": "playwright test",

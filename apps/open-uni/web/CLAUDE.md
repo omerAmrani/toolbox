@@ -32,5 +32,5 @@ Local to `app/components/`: `NavBar`, `PageHeader`, `Modal`, `Toast`, `StatusBad
 ## Before implementing a feature
 
 For non-trivial changes touching lecture processing, check the API docs first:
-- `apps/open-uni-recorder-api/docs/lectures.md` — endpoint contracts, SSE format, lecture statuses
-- `apps/open-uni-recorder-api/docs/pipeline.md` — pipeline flow
+- `apps/open-uni/api/docs/lectures.md` — endpoint contracts, SSE format, lecture statuses
+- `apps/open-uni/api/docs/pipeline.md` — pipeline flow

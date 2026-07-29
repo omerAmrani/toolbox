@@ -53,6 +53,11 @@ export class HealthController implements OnModuleInit {
     return this.buildFeatureMap();
   }
 
+  @Get('ping')
+  ping(): { ok: true } {
+    return { ok: true };
+  }
+
   private async check(
     envKey: string | undefined,
     envKeyName: string,

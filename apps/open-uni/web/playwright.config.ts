@@ -12,7 +12,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'NODE_ENV=test WEB_ORIGIN=http://localhost:3002 node dist/src/main.js',
-      cwd: path.resolve(__dirname, '../open-uni-recorder-api'),
+      cwd: path.resolve(__dirname, '../api'),
       url: 'http://localhost:3001/api/data-dir',
       reuseExistingServer: !process.env.CI,
       timeout: 15_000,

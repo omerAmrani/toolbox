@@ -6,6 +6,7 @@
     "dev": "turbo run dev",
     "predev:open-uni": "lsof -ti:3001,3002 | xargs kill -9 2>/dev/null; true",
     "dev:open-uni": "turbo run dev --filter=@toolbox/open-uni-recorder-api --filter=@toolbox/open-uni-recorder-web --parallel",
+    "tray:build": "turbo run build --filter=@toolbox/open-uni-recorder-api --filter=@toolbox/open-uni-recorder-web && bash apps/open-uni/tray/mac/build.sh",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"

@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY apps/open-uni-recorder-api/package.json ./apps/open-uni-recorder-api/
+COPY apps/open-uni/api/package.json ./apps/open-uni/api/
 COPY packages/ ./packages/
 
 
@@ -15,7 +15,7 @@ FROM base AS builder
 
 RUN pnpm install --frozen-lockfile
 
-COPY apps/open-uni-recorder-api ./apps/open-uni-recorder-api
+COPY apps/open-uni/api ./apps/open-uni/api
 
 RUN pnpm --filter @toolbox/open-uni-recorder-api build
 
@@ -26,10 +26,10 @@ RUN pnpm install --frozen-lockfile --prod
 
 RUN npx playwright install --with-deps chromium && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/apps/open-uni-recorder-api/dist ./apps/open-uni-recorder-api/dist
+COPY --from=builder /app/apps/open-uni/api/dist ./apps/open-uni/api/dist
 
 ENV NODE_ENV=production
 
 EXPOSE 3001
 
-CMD ["node", "apps/open-uni-recorder-api/dist/src/main.js"]
+CMD ["node", "apps/open-uni/api/dist/src/main.js"]

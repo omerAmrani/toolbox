@@ -71,6 +71,14 @@ describe('HealthController', () => {
     });
   });
 
+  describe('GET /health/ping', () => {
+    it('returns ok:true with no auth or external calls', async () => {
+      const res = await request(app.getHttpServer()).get('/health/ping');
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ ok: true });
+    });
+  });
+
   describe('GET /health/gemini', () => {
     it('returns ok:true with latency when API responds', async () => {
       mockGenerate.mockResolvedValue({ response: { text: () => 'ok' } });
