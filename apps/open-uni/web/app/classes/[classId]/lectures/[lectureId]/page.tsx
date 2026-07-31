@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { marked } from 'marked';
-import { apiUrl, deleteResource } from '@/lib/api';
+import { apiFetch, deleteResource } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
+import { requireCredentials } from '@/lib/credentials';
 import { useToast } from '@/app/components/Toast';
 import { BackendSelect } from '@/app/components/BackendSelect';
 import type { Backend } from '@/app/components/BackendSelect';
@@ -71,8 +72,8 @@ export default function LecturePage() {
 
   const loadLecture = useCallback(async () => {
     try {
-      const data: LectureMeta & { error?: string } = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/status`),
+      const data: LectureMeta & { error?: string } = await apiFetch(
+        `/api/classes/${classId}/lectures/${lectureId}/status`,
       ).then((r) => r.json());
       if (!data || data.error) {
         setNotFound(true);
@@ -87,7 +88,7 @@ export default function LecturePage() {
 
   const loadLectures = useCallback(async () => {
     try {
-      const data: LectureListItem[] = await fetch(apiUrl(`/api/classes/${classId}/lectures`)).then((r) => r.json());
+      const data: LectureListItem[] = await apiFetch(`/api/classes/${classId}/lectures`).then((r) => r.json());
       if (Array.isArray(data)) setLectures(data);
     } catch {
       /* ignore */
@@ -96,7 +97,7 @@ export default function LecturePage() {
 
   const loadSummary = useCallback(async () => {
     try {
-      const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summary`));
+      const r = await apiFetch(`/api/classes/${classId}/lectures/${lectureId}/summary`);
       if (!r.ok) return;
       setSummary(await r.text());
     } catch {
@@ -106,8 +107,8 @@ export default function LecturePage() {
 
   const loadHistory = useCallback(async () => {
     try {
-      const data: SummaryHistory = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries`),
+      const data: SummaryHistory = await apiFetch(
+        `/api/classes/${classId}/lectures/${lectureId}/summaries`,
       ).then((r) => r.json());
       setHistory(data);
     } catch {
@@ -165,7 +166,7 @@ export default function LecturePage() {
     setActiveView('transcript');
     if (transcript === null) {
       try {
-        const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/transcript`));
+        const r = await apiFetch(`/api/classes/${classId}/lectures/${lectureId}/transcript`);
         setTranscript(r.ok ? await r.text() : 'אין תמלול זמין');
       } catch {
         setTranscript('אין תמלול זמין');
@@ -176,7 +177,7 @@ export default function LecturePage() {
   const stopJob = async () => {
     if (!currentJobType) return;
     try {
-      await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/abort`), {
+      await apiFetch(`/api/classes/${classId}/lectures/${lectureId}/abort`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: currentJobType }),
@@ -192,8 +193,9 @@ export default function LecturePage() {
     setStreaming(false);
     streamBufferRef.current = '';
     try {
-      const hasTranscript = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/transcript`),
+      const creds = await requireCredentials();
+      const hasTranscript = await apiFetch(
+        `/api/classes/${classId}/lectures/${lectureId}/transcript`,
       ).then((r) => r.ok);
 
       if (!hasTranscript) {
@@ -202,7 +204,7 @@ export default function LecturePage() {
         setActionLabel('⏳ מתמלל...');
         await streamSSE(
           `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-          {},
+          creds,
           (ev) => {
             if (ev.type === 'progress') setActionLabel(`⏳ ${String(ev.message)}`);
             else if (ev.type === 'aborted') throw new Error('aborted');
@@ -218,7 +220,7 @@ export default function LecturePage() {
 
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-        { backend },
+        { backend, ...creds },
         (ev) => {
           if (ev.type === 'progress') {
             setActionLabel(`⏳ ${String(ev.message)}`);
@@ -257,9 +259,10 @@ export default function LecturePage() {
     setJobActive(true);
     setCurrentJobType('transcribe');
     try {
+      const creds = await requireCredentials();
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-        {},
+        creds,
         (ev) => {
           if (ev.type === 'progress') setRetranscribeLabel(`⏳ ${String(ev.message)}`);
           else if (ev.type === 'aborted') throw new Error('aborted');
@@ -268,7 +271,7 @@ export default function LecturePage() {
       );
       showToast('התמלול הושלם!');
       try {
-        const r = await fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/transcript`));
+        const r = await apiFetch(`/api/classes/${classId}/lectures/${lectureId}/transcript`);
         if (r.ok) setTranscript(await r.text());
       } catch {
         /* ignore */
@@ -322,8 +325,8 @@ export default function LecturePage() {
       return;
     }
     try {
-      const r = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}`),
+      const r = await apiFetch(
+        `/api/classes/${classId}/lectures/${lectureId}/summaries/${summaryId}`,
       );
       if (!r.ok) throw new Error();
       setSummary(await r.text());
@@ -343,8 +346,8 @@ export default function LecturePage() {
     );
     if (ok === null) return;
     try {
-      const next: SummaryHistory = await fetch(
-        apiUrl(`/api/classes/${classId}/lectures/${lectureId}/summaries`),
+      const next: SummaryHistory = await apiFetch(
+        `/api/classes/${classId}/lectures/${lectureId}/summaries`,
       ).then((r) => r.json());
       setHistory(next);
       setViewedSummaryId(null);

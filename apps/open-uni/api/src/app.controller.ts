@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Res, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Res, Req } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync } from 'fs';
 import path from 'path';
 import { StorageService } from './modules/storage/storage.service';
 import { getSettings, saveSettings } from '../settings';
@@ -13,31 +13,6 @@ const execAsync = promisify(exec);
 @Controller('api')
 export class AppController {
   constructor(private readonly storage: StorageService) {}
-
-  @Get('search')
-  search(@Query('q') q: string, @Query('classId') classId: string, @Res() res: Response) {
-    if (!q || q.trim().length < 2) return res.status(400).json({ error: 'q must be at least 2 chars' });
-    const query = q.trim();
-    const results: any[] = [];
-    const classIds = classId
-      ? [classId]
-      : (existsSync(this.storage.CLASSES_DIR)
-          ? readdirSync(this.storage.CLASSES_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
-          : []);
-
-    for (const cId of classIds) {
-      for (const lecture of this.storage.getLectures(cId)) {
-        const tPath = path.join(this.storage.CLASSES_DIR, cId, 'lectures', lecture.id, 'transcript.txt');
-        if (!existsSync(tPath)) continue;
-        const text = readFileSync(tPath, 'utf8');
-        const idx = text.toLowerCase().indexOf(query.toLowerCase());
-        if (idx === -1) continue;
-        const snippet = text.slice(Math.max(0, idx - 100), idx + 200);
-        results.push({ classId: cId, lectureId: lecture.id, lectureName: lecture.name, snippet });
-      }
-    }
-    res.json(results);
-  }
 
   @Get('data-dir')
   getDataDir(@Res() res: Response) {

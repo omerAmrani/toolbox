@@ -5,7 +5,7 @@ export type ProgressCallback = (msg: string) => void;
 export type TokenCallback = (token: string) => void;
 
 export interface SummarizerBackend {
-  mergeSummaries(chunks: string[], onProgress?: ProgressCallback, onToken?: TokenCallback | null): Promise<string>;
+  mergeSummaries(chunks: string[], apiKey: string, onProgress?: ProgressCallback, onToken?: TokenCallback | null): Promise<string>;
 }
 
 const backends: Record<string, () => Promise<SummarizerBackend>> = {

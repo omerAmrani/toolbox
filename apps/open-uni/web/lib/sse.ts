@@ -9,9 +9,14 @@ export async function streamSSE(
 ): Promise<void> {
   const resp = await fetch(apiUrl(path), {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  if (resp.status === 401 && typeof window !== 'undefined') {
+    window.location.href = '/login';
+    return;
+  }
   if (!resp.ok) {
     const err = (await resp.json().catch(() => ({}))) as { error?: string };
     throw new Error(err.error || `HTTP ${resp.status}`);

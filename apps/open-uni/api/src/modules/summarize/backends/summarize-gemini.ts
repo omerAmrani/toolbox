@@ -1,19 +1,17 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { buildPrompt, summarizeChunk, TRUNCATION_WARNING, SYSTEM_PROMPT } from './prompt';
-import { MERGE_MAX_TOKENS, GEMINI_MODEL, GEMINI_API_KEY } from '../../../config';
+import { buildPrompt, TRUNCATION_WARNING, SYSTEM_PROMPT } from './prompt';
+import { MERGE_MAX_TOKENS, GEMINI_MODEL } from '../../../config';
 
-export { summarizeChunk };
-
-function getModel() {
-  if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY not set in .env');
-  return new GoogleGenerativeAI(GEMINI_API_KEY).getGenerativeModel({ model: GEMINI_MODEL!, systemInstruction: SYSTEM_PROMPT });
+function getModel(apiKey: string) {
+  if (!apiKey) throw new Error('Gemini API key required for summarization');
+  return new GoogleGenerativeAI(apiKey).getGenerativeModel({ model: GEMINI_MODEL!, systemInstruction: SYSTEM_PROMPT });
 }
 
-export async function mergeSummaries(chunks: string[], onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {
+export async function mergeSummaries(chunks: string[], apiKey: string, onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {
   const fullTranscript = chunks.join('\n\n');
   onProgress('מסכם עם Gemini...');
 
-  const model = getModel();
+  const model = getModel(apiKey);
 
   if (onToken) {
     const result = await model.generateContentStream({

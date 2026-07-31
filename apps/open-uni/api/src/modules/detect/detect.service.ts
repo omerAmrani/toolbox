@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { chromium } from 'playwright';
 import { StorageService } from '../storage/storage.service';
-import { OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID } from '../../config';
+import { OpalCredentials } from '../../credentials';
 
 @Injectable()
 export class DetectService {
   constructor(private readonly storage: StorageService) {}
 
-  private async loginToOpal(browser: any, onProgress: (msg: string) => void): Promise<any> {
+  private async loginToOpal(browser: any, credentials: OpalCredentials, onProgress: (msg: string) => void): Promise<any> {
     const context = await browser.newContext();
     const page = await context.newPage();
     page.setDefaultTimeout(30000);
@@ -18,9 +18,10 @@ export class DetectService {
       { waitUntil: 'domcontentloaded' }
     );
 
-    await page.fill('#p_user', OPENU_USERNAME);
-    await page.fill('#p_mis_student', OPENU_ID);
-    await page.fill('input[type="password"]', OPENU_PASSWORD);
+    const { username, password, id } = credentials;
+    await page.fill('#p_user', username);
+    await page.fill('#p_mis_student', id);
+    await page.fill('input[type="password"]', password);
     await page.click('input[type="submit"], button[type="submit"]');
     await page.waitForURL(/opal\.openu\.ac\.il/, { timeout: 30000 });
     await page.waitForLoadState('domcontentloaded');
@@ -32,10 +33,10 @@ export class DetectService {
     return page;
   }
 
-  async extractCourseMeta(opalCourseUrl: string, onProgress = (_: string) => {}): Promise<any> {
+  async extractCourseMeta(opalCourseUrl: string, credentials: OpalCredentials, onProgress = (_: string) => {}): Promise<any> {
     const browser = await chromium.launch({ headless: true });
     try {
-      const page = await this.loginToOpal(browser, onProgress);
+      const page = await this.loginToOpal(browser, credentials, onProgress);
 
       onProgress('קורא פרטי קורס מ-OPAL...');
       await page.goto(opalCourseUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
@@ -64,7 +65,7 @@ export class DetectService {
     }
   }
 
-  async detectNewLectures(classId: string, onProgress = (_: string) => {}): Promise<any[]> {
+  async detectNewLectures(classId: string, credentials: OpalCredentials, onProgress = (_: string) => {}): Promise<any[]> {
     const cls = this.storage.getClass(classId);
     if (!cls) throw new Error(`Class not found: ${classId}`);
     if (!cls.opalCourseUrl) throw new Error(`אין קישור OPAL לקורס "${cls.name}"`);
@@ -78,7 +79,7 @@ export class DetectService {
 
     const browser = await chromium.launch({ headless: true });
     try {
-      const page = await this.loginToOpal(browser, onProgress);
+      const page = await this.loginToOpal(browser, credentials, onProgress);
 
       onProgress(`מנתח הרצאות עבור "${cls.name}"...`);
       await page.goto(cls.opalCourseUrl, { waitUntil: 'networkidle', timeout: 40000 });

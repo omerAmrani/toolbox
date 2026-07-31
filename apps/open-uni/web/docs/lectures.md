@@ -4,6 +4,7 @@
 
 - Page: `/classes/[classId]/lectures/[lectureId]`
 - Components: `BackendSelect`, `Toast`, `Status`
+- Fetches go through `apiFetch` (`lib/api.ts`); SSE calls (`streamSSE`, `lib/sse.ts`) send the same `auth_token` session cookie internally — see `apps/open-uni/api/docs/lectures.md`.
 
 **Layout:**
 - Split view: main column (tabbed content pane) + sidebar (metadata + actions)

@@ -4,6 +4,7 @@
 
 - Pages: `/classes`, `/classes/[classId]`
 - Components: `NewCourseModal`, `Modal`, `Toast`, `Status`
+- All `/api/classes/**` calls go through `apiFetch` (`lib/api.ts`), not raw `fetch` — it sends the `auth_token` session cookie (`credentials: 'include'`) the API uses to scope classes/lectures to the logged-in user, and redirects to `/login` on a 401 (see `apps/open-uni/api/docs/classes.md`). Endpoints that aren't user-scoped (`/api/data-dir`, `/api/reload-from-disk`) can stay on raw `fetch`.
 
 **Classes list (`/classes`):**
 - Grid of class cards with name, semester/year (Hebrew), lecture count, and first-char icon

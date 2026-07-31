@@ -6,10 +6,9 @@ Sends Gmail notifications when new lectures are detected or when a summary is re
 
 - Module: `EmailModule`
 - Service: `EmailService`
-- Called automatically by `PipelineService` and manually via `POST /api/classes/test-email`
+- Called automatically after each lecture completes processing in the queue, and manually via `POST /api/classes/test-email`
 
 **Triggers:**
-- Detection email — sent after `runFullPipeline()` if new lectures were found
 - Summary email — sent after each lecture completes processing in the queue
 
 **Config:** `GMAIL_*` env vars (see `.env.local`). Recipient is configured in the same env.
@@ -18,7 +17,7 @@ Sends Gmail notifications when new lectures are detected or when a summary is re
 
 ## Tests
 
-Dispatch is covered with `EmailService` mocked — assertions only, never hits SMTP. `sendLectureSummary` is asserted on queue completion and `sendDetectionNotification` when detection finds new lectures (and not when it finds none). Both are fire-and-forget, so a rejected promise must not fail the pipeline run. See [pipeline.md](pipeline.md#tests) and `open-uni-deployment.md` Phase 1.
+Dispatch is covered with `EmailService` mocked — assertions only, never hits SMTP. `sendLectureSummary` is asserted on queue completion. It's fire-and-forget, so a rejected promise must not fail the pipeline run. See [pipeline.md](pipeline.md#tests) and `open-uni-deployment.md` Phase 1.
 
 ## Web
 

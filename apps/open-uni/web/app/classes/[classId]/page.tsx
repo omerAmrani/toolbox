@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { apiUrl, deleteResource } from '@/lib/api';
+import { apiFetch, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { streamSSE } from '@/lib/sse';
+import { requireCredentials } from '@/lib/credentials';
 import { useToast } from '@/app/components/Toast';
 import { Status, fmtDateLong } from '@/app/components/Status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
@@ -45,7 +46,7 @@ export default function ClassDetailPage() {
 
   const loadClass = useCallback(async () => {
     try {
-      const r = await fetch(apiUrl('/api/classes'));
+      const r = await apiFetch('/api/classes');
       if (!r.ok) throw new Error('failed to load classes');
       const all: ClassInfo[] = await r.json();
       const found = all.find((c) => c.id === classId);
@@ -62,7 +63,7 @@ export default function ClassDetailPage() {
 
   const loadLectures = useCallback(async () => {
     try {
-      const r = await fetch(apiUrl(`/api/classes/${classId}/lectures`));
+      const r = await apiFetch(`/api/classes/${classId}/lectures`);
       if (!r.ok) throw new Error('failed to load lectures');
       const data: Lecture[] = await r.json();
       setLectures(data);
@@ -124,9 +125,10 @@ export default function ClassDetailPage() {
   const runPipeline = async (lectureId: string) => {
     setRunningIds((s) => new Set(s).add(lectureId));
     try {
+      const creds = await requireCredentials();
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-        {},
+        creds,
         (ev) => {
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
@@ -134,7 +136,7 @@ export default function ClassDetailPage() {
       );
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-        {},
+        creds,
         (ev) => {
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
@@ -158,9 +160,10 @@ export default function ClassDetailPage() {
   const runSummarize = async (lectureId: string) => {
     setRunningIds((s) => new Set(s).add(lectureId));
     try {
+      const creds = await requireCredentials();
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-        {},
+        creds,
         (ev) => {
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));

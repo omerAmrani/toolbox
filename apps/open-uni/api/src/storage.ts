@@ -1,13 +1,11 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, readdirSync } from 'fs';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import db, { CLASSES_DIR } from './db';
 
 export { CLASSES_DIR };
 
 // ── App settings ──────────────────────────────────────────────────────────────
-export interface CronSchedule { days: number[]; hour: number; minute: number }
-const DEFAULT_CRON_SCHEDULE: CronSchedule = { days: [4, 5], hour: 10, minute: 0 };
-
 function getSetting(key: string): string | null {
   const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
   return row?.value ?? null;
@@ -15,16 +13,6 @@ function getSetting(key: string): string | null {
 
 function setSetting(key: string, value: string): void {
   db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
-}
-
-export function getCronSchedule(): CronSchedule {
-  const raw = getSetting('cronSchedule');
-  if (!raw) return DEFAULT_CRON_SCHEDULE;
-  try { return JSON.parse(raw); } catch { return DEFAULT_CRON_SCHEDULE; }
-}
-
-export function setCronSchedule(schedule: CronSchedule): void {
-  setSetting('cronSchedule', JSON.stringify(schedule));
 }
 
 export function getNotifyEmail(): string | null {
@@ -69,23 +57,35 @@ function lectureWithSummaries(row: any): any {
 }
 
 // ── Classes ───────────────────────────────────────────────────────────────────
-export function createClass({ name, semester, year, code, opalCourseUrl }: { name: string; semester?: string; year?: number; code?: string; opalCourseUrl?: string }): any {
+export function createClass({ name, semester, year, code, opalCourseUrl }: { name: string; semester?: string; year?: number; code?: string; opalCourseUrl?: string }, userId: string): any {
   const id = makeId(name);
   const dir = path.join(CLASSES_DIR, id);
   mkdirSync(path.join(dir, 'lectures'), { recursive: true });
-  const meta = { id, name, semester, year: year ? Number(year) : null, createdAt: new Date().toISOString(), code: code || null, opalCourseUrl: opalCourseUrl || null };
-  db.prepare('INSERT INTO classes (id, name, semester, year, createdAt, code, opalCourseUrl) VALUES (?, ?, ?, ?, ?, ?, ?)')
-    .run(meta.id, meta.name, meta.semester, meta.year, meta.createdAt, meta.code, meta.opalCourseUrl);
+  const meta = { id, userId, name, semester, year: year ? Number(year) : null, createdAt: new Date().toISOString(), code: code || null, opalCourseUrl: opalCourseUrl || null };
+  db.prepare('INSERT INTO classes (id, userId, name, semester, year, createdAt, code, opalCourseUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(meta.id, meta.userId, meta.name, meta.semester, meta.year, meta.createdAt, meta.code, meta.opalCourseUrl);
   writeMetaBackup(path.join(dir, 'meta.json'), meta);
   return meta;
 }
 
-export function getClasses(): any[] {
+// userId omitted → all classes across all owners. Only for internal/cron use
+// (pipeline, detect) which isn't scoped to one browser. Controllers serving a
+// browser request must always pass userId.
+export function getClasses(userId?: string): any[] {
+  if (userId) return db.prepare('SELECT * FROM classes WHERE userId = ? ORDER BY createdAt DESC').all(userId);
   return db.prepare('SELECT * FROM classes ORDER BY createdAt DESC').all();
 }
 
+// Unscoped lookup by id — for internal/cron use only (see getClasses above).
 export function getClass(classId: string): any {
   return db.prepare('SELECT * FROM classes WHERE id = ?').get(classId) || null;
+}
+
+// Ownership-checked lookup — controllers use this to gate any class/lecture
+// access. Returns null both when the class doesn't exist and when it belongs
+// to someone else, so a mismatched device id behaves like "not found."
+export function getClassForUser(classId: string, userId: string): any {
+  return db.prepare('SELECT * FROM classes WHERE id = ? AND userId = ?').get(classId, userId) || null;
 }
 
 export function updateClassMeta(classId: string, updates: Record<string, any>): any {
@@ -227,6 +227,35 @@ export function deleteSummaryVersion(classId: string, lectureId: string, summary
   return true;
 }
 
+// ── Users & magic-link tokens ───────────────────────────────────────────────────
+export interface User { id: string; email: string; createdAt: string }
+
+export function getUserByEmail(email: string): User | null {
+  return db.prepare('SELECT * FROM users WHERE email = ?').get(email) as User | null || null;
+}
+
+export function createUser(email: string): User {
+  const user: User = { id: randomUUID(), email, createdAt: new Date().toISOString() };
+  db.prepare('INSERT INTO users (id, email, createdAt) VALUES (?, ?, ?)').run(user.id, user.email, user.createdAt);
+  return user;
+}
+
+export function getOrCreateUser(email: string): User {
+  return getUserByEmail(email) || createUser(email);
+}
+
+export function createMagicLinkToken(tokenHash: string, email: string, expiresAt: string): void {
+  db.prepare('INSERT INTO magic_link_tokens (tokenHash, email, expiresAt) VALUES (?, ?, ?)').run(tokenHash, email, expiresAt);
+}
+
+export function consumeMagicLinkToken(tokenHash: string): { email: string } | null {
+  const row = db.prepare('SELECT email, expiresAt, usedAt FROM magic_link_tokens WHERE tokenHash = ?').get(tokenHash) as
+    { email: string; expiresAt: string; usedAt: string | null } | undefined;
+  if (!row || row.usedAt || new Date(row.expiresAt) < new Date()) return null;
+  db.prepare('UPDATE magic_link_tokens SET usedAt = ? WHERE tokenHash = ?').run(new Date().toISOString(), tokenHash);
+  return { email: row.email };
+}
+
 // ── Reload from disk ──────────────────────────────────────────────────────────
 export function reloadFromDisk(): { classes: number; lectures: number } {
   if (!existsSync(CLASSES_DIR)) return { classes: 0, lectures: 0 };
@@ -241,9 +270,11 @@ export function reloadFromDisk(): { classes: number; lectures: number } {
     let classMeta: any;
     try { classMeta = JSON.parse(readFileSync(metaPath, 'utf8')); } catch { continue; }
 
+    if (!classMeta.userId) { console.warn(`[reload] skipping class without userId: ${classId}`); continue; }
+
     db.prepare(
-      'INSERT OR REPLACE INTO classes (id, name, semester, year, createdAt, opalCourseUrl, code) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(classMeta.id, classMeta.name, classMeta.semester, classMeta.year || null, classMeta.createdAt, classMeta.opalCourseUrl || null, classMeta.code || null);
+      'INSERT OR REPLACE INTO classes (id, userId, name, semester, year, createdAt, opalCourseUrl, code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(classMeta.id, classMeta.userId, classMeta.name, classMeta.semester, classMeta.year || null, classMeta.createdAt, classMeta.opalCourseUrl || null, classMeta.code || null);
     classCount++;
 
     const lecturesDir = path.join(CLASSES_DIR, classId, 'lectures');

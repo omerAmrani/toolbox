@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiUrl, deleteResource } from '@/lib/api';
+import { apiUrl, apiFetch, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
 import { sortBySemester } from '@/lib/selectedSemester';
@@ -31,7 +31,7 @@ export default function ClassesPage() {
 
   const loadClasses = async () => {
     try {
-      const data: ClassRow[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
+      const data: ClassRow[] = await apiFetch('/api/classes').then((r) => r.json());
       setClasses(data);
     } catch {
       setClasses([]);

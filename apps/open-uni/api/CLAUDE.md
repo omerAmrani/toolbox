@@ -5,7 +5,7 @@ NestJS API, port 3001. TypeScript, `better-sqlite3` (no ORM), `@nestjs/schedule`
 ## Module boundary rule
 
 Two module types — never violate the boundary:
-- **Utils** (no DB, no external AI): `StorageModule`, `DetectModule`, `DownloadModule`, `WhisperModule`, `SummarizeModule`, `EmailModule`, `QaModule`
+- **Utils** (no DB, no external AI): `StorageModule`, `DetectModule`, `DownloadModule`, `WhisperModule`, `SummarizeModule`, `EmailModule`
 - **App logic** (owns a domain, may use DB + AI): `ClassesModule`, `LecturesModule`, `PipelineModule`, `JobsModule`
 
 App logic → utils: allowed. Utils → app logic: never.
@@ -18,7 +18,7 @@ Single entrypoint: `src/config.ts` — dotenv + exports. Import from there, not 
 
 SQLite DB + filesystem mirror. Every write goes to both:
 - DB: source of truth for queries
-- `data/classes/<classId>/lectures/<lectureId>/meta.json`: filesystem backup, also where `transcript.txt`, `audio.mp3`, `qa.json`, and summary files live
+- `data/classes/<classId>/lectures/<lectureId>/meta.json`: filesystem backup, also where `transcript.txt`, `audio.mp3`, and summary files live
 
 ## On startup
 
@@ -28,7 +28,7 @@ SQLite DB + filesystem mirror. Every write goes to both:
 
 For non-trivial changes, check `docs/` for relevant context first:
 - `docs/pipeline.md` — full pipeline flow, cron, queue runner
-- `docs/lectures.md` — transcribe/summarize SSE endpoints, Q&A flow, lecture statuses
+- `docs/lectures.md` — transcribe/summarize SSE endpoints, lecture statuses
 
 ## Code quality rules
 

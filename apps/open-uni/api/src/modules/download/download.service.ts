@@ -4,7 +4,8 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { chromium } from 'playwright';
 import { WhisperService } from '../whisper/whisper.service';
-import { TMP_DIR, OPENU_USERNAME, OPENU_PASSWORD, OPENU_ID, WHISPER_CONCURRENCY } from '../../config';
+import { TMP_DIR, WHISPER_CONCURRENCY } from '../../config';
+import { OpalCredentials } from '../../credentials';
 
 const CONCURRENCY = parseInt(WHISPER_CONCURRENCY, 10);
 const CHUNK_SECS = 600;
@@ -16,7 +17,7 @@ export class DownloadService {
 
   // ── Extract (Playwright login + HLS URL) ─────────────────────────────────────
 
-  async extractVideoUrl(pageUrl: string, onProgress = (_: string) => {}, signal: AbortSignal | null = null): Promise<string> {
+  async extractVideoUrl(pageUrl: string, credentials: OpalCredentials, onProgress = (_: string) => {}, signal: AbortSignal | null = null): Promise<string> {
     if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
 
     const log = (msg: string) => { console.log(msg); onProgress(msg); };
@@ -42,9 +43,10 @@ export class DownloadService {
       log(`Login page loaded: ${page.url()}`);
 
       log('Filling credentials...');
-      await page.fill('#p_user', OPENU_USERNAME!);
-      await page.fill('#p_mis_student', OPENU_ID!);
-      await page.fill('input[type="password"]', OPENU_PASSWORD!);
+      const { username, password, id } = credentials;
+      await page.fill('#p_user', username);
+      await page.fill('#p_mis_student', id);
+      await page.fill('input[type="password"]', password);
 
       log('Submitting login form...');
       await page.click('input[type="submit"], button[type="submit"]');
@@ -161,14 +163,14 @@ export class DownloadService {
     return lines.join('\n');
   }
 
-  private async transcribeSegment(filePath: string, idx: number, total: number, onProgress: (msg: string) => void): Promise<{ text: string; segments: any[] }> {
+  private async transcribeSegment(filePath: string, idx: number, total: number, groqApiKey: string, onProgress: (msg: string) => void): Promise<{ text: string; segments: any[] }> {
     console.log(`  [transcribe] ${path.basename(filePath)} (${statSync(filePath).size} bytes)`);
-    const result = await this.whisper.transcribe(filePath, () => onProgress(`מתמלל קטע ${idx + 1} מתוך ${total}...`));
+    const result = await this.whisper.transcribe(filePath, groqApiKey, () => onProgress(`מתמלל קטע ${idx + 1} מתוך ${total}...`));
     rmSync(filePath);
     return result;
   }
 
-  private runTranscribeQueue(onProgress: (msg: string) => void) {
+  private runTranscribeQueue(groqApiKey: string, onProgress: (msg: string) => void) {
     const results: { idx: number; text: string; chunkText: string }[] = [];
     const pending: { idx: number; p: string; resolve: (v: { chunkText: string }) => void }[] = [];
     let active = 0;
@@ -180,7 +182,7 @@ export class DownloadService {
         active++;
         const { idx, p, resolve } = pending.shift()!;
         console.log(`\n🎙️  Transcribing segment ${idx + 1} (active=${active}, pending=${pending.length})...`);
-        this.transcribeSegment(p, idx, totalSeen, onProgress).then((result) => {
+        this.transcribeSegment(p, idx, totalSeen, groqApiKey, onProgress).then((result) => {
           const chunkText = this.buildChunkText(result.segments, idx);
           results.push({ idx, text: result.text, chunkText });
           active--;
@@ -222,6 +224,7 @@ export class DownloadService {
 
   async downloadAndTranscribe(
     videoUrl: string,
+    groqApiKey: string,
     onProgress = (_: string) => {},
     onChunkReady: ((idx: number, chunkText: string) => void) | null = null,
     saveMp3Path: string | null = null,
@@ -259,7 +262,7 @@ export class DownloadService {
     let totalSecs = 0;
     let nextToDetect = 0;
     let stalledByWatchdog = false;
-    const queue = this.runTranscribeQueue(onProgress);
+    const queue = this.runTranscribeQueue(groqApiKey, onProgress);
     const chunkJobs: Promise<any>[] = [];
     let stallTimer = setTimeout(() => {
       console.error('\n[ffmpeg] no progress for 3 minutes — killing, saving partial transcript');

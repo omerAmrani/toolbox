@@ -8,10 +8,11 @@ Tests AI backend connectivity and latency. Used by the settings page to verify A
 - Controller: `HealthController`
 
 Routes:
-- `GET /health/gemini`
-- `GET /health/claude`
-- `GET /health/features`
+- `POST /health/gemini`
+- `POST /health/claude`
 - `GET /health/ping`
+
+No auth guard on any of these — `gemini`/`claude` take the key to test directly in the body, so there's nothing server-side to scope per user.
 
 ### `/health/ping`
 
@@ -19,27 +20,15 @@ Lightweight liveness check for the tray app to poll (see `apps/open-uni/docs/loc
 
 ### `/health/gemini` and `/health/claude`
 
+`POST` (not `GET`) — the API key lives client-side only (per-user, encrypted, see `apps/open-uni/web/lib/credentials.ts`) and is never stored server-side, so the caller sends it in the body on each check: `{ apiKey: string }`.
+
 Response: `{ ok: boolean, configured: boolean, ms?: number, response?: string, error?: string }`
 
-- `configured: false` — API key not set; `ok` will be false
+- `configured: false` — no `apiKey` in the request body; `ok` will be false
 - `configured: true, ok: true` — backend responded successfully
-- `configured: true, ok: false` — key set but request failed
+- `configured: true, ok: false` — key sent but the request failed
 
-### `/health/features`
-
-Returns the availability of each app feature based on env var presence at startup. Missing var names are never exposed — only feature names and availability.
-
-Response: `{ feature: string, available: boolean }[]`
-
-Features:
-| feature | required env vars |
-|---|---|
-| `transcription` | `GROQ_API_KEY` |
-| `summarization` | `GEMINI_API_KEY` (default) or `ANTHROPIC_API_KEY` if `SUMMARIZE_BACKEND=claude` |
-| `lecture-download` | `OPENU_USERNAME`, `OPENU_PASSWORD`, `OPENU_ID` |
-| `email-notifications` | `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `NOTIFY_EMAIL` |
-
-Missing features are also logged at startup via `onModuleInit` — var names appear in server logs only, never in the HTTP response.
+There is no `/health/features` endpoint — the old server-side feature-availability check (based on env vars / a shared `settings.json`) was removed along with single-tenant credential storage. Each credential is per-user and client-side now, so "is it configured" is a client-side question (does `localStorage` have a decrypted value), not something the server can answer.
 
 ## Web
 

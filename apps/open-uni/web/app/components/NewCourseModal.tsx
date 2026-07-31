@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { apiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
+import { requireCredentials } from '@/lib/credentials';
 import { Button } from '@/app/components/Button';
 import { Select } from '@/app/components/Select';
 
@@ -68,7 +69,7 @@ export default function NewCourseModal({ open, onClose, onCreated, editTarget }:
     setError(null);
     setSubmitting(true);
     try {
-      const r = await fetch(apiUrl('/api/classes'), {
+      const r = await apiFetch('/api/classes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -98,10 +99,12 @@ export default function NewCourseModal({ open, onClose, onCreated, editTarget }:
     lastDetectedUrl.current = trimmed;
     setDetecting(true);
     try {
-      const r = await fetch(apiUrl('/api/classes/opal-metadata'), {
+      const creds = await requireCredentials().catch(() => null);
+      if (!creds) { setShowFallback(true); return; }
+      const r = await apiFetch('/api/classes/opal-metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ opalCourseUrl: trimmed }),
+        body: JSON.stringify({ opalCourseUrl: trimmed, ...creds }),
       });
       if (!r.ok) {
         setShowFallback(true);
@@ -146,7 +149,7 @@ export default function NewCourseModal({ open, onClose, onCreated, editTarget }:
     }
     setSubmitting(true);
     try {
-      const r = await fetch(apiUrl(`/api/classes/${editTarget!.id}`), {
+      const r = await apiFetch(`/api/classes/${editTarget!.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

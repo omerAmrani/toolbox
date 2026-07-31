@@ -6,10 +6,11 @@ import path from 'path';
 import { LecturesModule } from '../src/modules/lectures/lectures.module';
 import { DownloadService } from '../src/modules/download/download.service';
 import { SummarizeService } from '../src/modules/summarize/summarize.service';
-import { QaService } from '../src/modules/qa/qa.service';
 import { ClassesModule } from '../src/modules/classes/classes.module';
 import { StorageService } from '../src/modules/storage/storage.service';
 import { truncateAll, cleanClassesDir } from './helpers/db';
+import { authCookie } from './helpers/auth';
+import { tryAcquireJobSlot, releaseJobSlot } from '../src/job-guard';
 
 const mockDownload = {
   extractVideoUrl: jest.fn().mockResolvedValue('https://example.com/video.mp4'),
@@ -23,15 +24,6 @@ const mockSummarize = {
   withAbort: jest.fn().mockImplementation((p: Promise<any>) => p),
 };
 
-const mockQa = {
-  generateQuestions: jest.fn().mockResolvedValue(['Question 1?', 'Question 2?', 'Question 3?']),
-  evaluateAnswers: jest.fn().mockResolvedValue([
-    { correct: true, explanation: 'Correct!' },
-    { correct: false, explanation: 'Not quite.' },
-    { correct: true, explanation: 'Correct!' },
-  ]),
-};
-
 function parseSSE(raw: string): any[] {
   return raw
     .split('\n\n')
@@ -39,10 +31,30 @@ function parseSSE(raw: string): any[] {
     .map(chunk => JSON.parse(chunk.slice(6)));
 }
 
+const USER_A = 'user-a';
+const USER_B = 'user-b';
+
 describe('LecturesController', () => {
   let app: INestApplication;
   let storage: StorageService;
   let classId: string;
+
+  const get = (path: string, user: string | null = USER_A) => {
+    const req = request(app.getHttpServer()).get(path);
+    return user ? req.set('Cookie', authCookie(user)) : req;
+  };
+  const post = (path: string, user: string | null = USER_A) => {
+    const req = request(app.getHttpServer()).post(path);
+    return user ? req.set('Cookie', authCookie(user)) : req;
+  };
+  const patch = (path: string, user: string | null = USER_A) => {
+    const req = request(app.getHttpServer()).patch(path);
+    return user ? req.set('Cookie', authCookie(user)) : req;
+  };
+  const del = (path: string, user: string | null = USER_A) => {
+    const req = request(app.getHttpServer()).delete(path);
+    return user ? req.set('Cookie', authCookie(user)) : req;
+  };
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -50,7 +62,6 @@ describe('LecturesController', () => {
     })
       .overrideProvider(DownloadService).useValue(mockDownload)
       .overrideProvider(SummarizeService).useValue(mockSummarize)
-      .overrideProvider(QaService).useValue(mockQa)
       .compile();
 
     app = module.createNestApplication();
@@ -70,22 +81,33 @@ describe('LecturesController', () => {
       mergeSummaries: jest.fn().mockResolvedValue('Mock summary content'),
     });
     mockSummarize.withAbort.mockImplementation((p: Promise<any>) => p);
-    const cls = await request(app.getHttpServer())
-      .post('/api/classes')
+    const cls = await post('/api/classes')
       .send({ name: 'Test Class' });
     classId = cls.body.id;
+  });
+
+  describe('auth', () => {
+    it('returns 401 when not logged in', async () => {
+      const res = await get(`/api/classes/${classId}/lectures`, null);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 404 when another user owns the class', async () => {
+      const res = await get(`/api/classes/${classId}/lectures`, USER_B);
+      expect(res.status).toBe(404);
+    });
   });
 
   // ── Lectures CRUD ──────────────────────────────────────────────────────────
 
   describe('GET /api/classes/:classId/lectures', () => {
     it('returns 404 for unknown class', async () => {
-      const res = await request(app.getHttpServer()).get('/api/classes/bad-id/lectures');
+      const res = await get('/api/classes/bad-id/lectures');
       expect(res.status).toBe(404);
     });
 
     it('returns empty array for class with no lectures', async () => {
-      const res = await request(app.getHttpServer()).get(`/api/classes/${classId}/lectures`);
+      const res = await get(`/api/classes/${classId}/lectures`);
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     });
@@ -93,29 +115,25 @@ describe('LecturesController', () => {
 
   describe('POST /api/classes/:classId/lectures', () => {
     it('returns 400 when name is missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const res = await post(`/api/classes/${classId}/lectures`)
         .send({ url: 'https://example.com/lecture' });
       expect(res.status).toBe(400);
     });
 
     it('returns 400 when url is missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const res = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'Lecture 1' });
       expect(res.status).toBe(400);
     });
 
     it('returns 404 for unknown class', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/bad-id/lectures')
+      const res = await post('/api/classes/bad-id/lectures')
         .send({ name: 'L', url: 'https://example.com' });
       expect(res.status).toBe(404);
     });
 
     it('creates lecture with default pending status', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const res = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'Lecture 1', url: 'https://example.com/1' });
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ name: 'Lecture 1', status: 'pending' });
@@ -123,8 +141,7 @@ describe('LecturesController', () => {
     });
 
     it('ignores client-supplied status and always defaults to pending', async () => {
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const res = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L3', url: 'https://example.com/3', status: 'summarized' });
       expect(res.status).toBe(201);
       expect(res.body.status).toBe('pending');
@@ -133,34 +150,29 @@ describe('LecturesController', () => {
 
   describe('DELETE /api/classes/:classId/lectures/:lectureId', () => {
     it('returns 404 for unknown lecture', async () => {
-      const res = await request(app.getHttpServer())
-        .delete(`/api/classes/${classId}/lectures/nonexistent`);
+      const res = await del(`/api/classes/${classId}/lectures/nonexistent`);
       expect(res.status).toBe(404);
     });
 
     it('deletes lecture and returns ok', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'Delete Me', url: 'https://example.com' });
 
-      const del = await request(app.getHttpServer())
-        .delete(`/api/classes/${classId}/lectures/${created.body.id}`);
-      expect(del.status).toBe(200);
-      expect(del.body.ok).toBe(true);
+      const delRes = await del(`/api/classes/${classId}/lectures/${created.body.id}`);
+      expect(delRes.status).toBe(200);
+      expect(delRes.body.ok).toBe(true);
 
-      const list = await request(app.getHttpServer()).get(`/api/classes/${classId}/lectures`);
+      const list = await get(`/api/classes/${classId}/lectures`);
       expect(list.body).toHaveLength(0);
     });
   });
 
   describe('PATCH /api/classes/:classId/lectures/:lectureId', () => {
     it('updates lecture name and lectureDate', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'Original', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .patch(`/api/classes/${classId}/lectures/${created.body.id}`)
+      const res = await patch(`/api/classes/${classId}/lectures/${created.body.id}`)
         .send({ name: 'Updated', lectureDate: '2025-01-15' });
       expect(res.status).toBe(200);
       expect(res.body.name).toBe('Updated');
@@ -172,19 +184,16 @@ describe('LecturesController', () => {
 
   describe('GET /api/classes/:classId/lectures/:lectureId/status', () => {
     it('returns full lecture object', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${created.body.id}/status`);
+      const res = await get(`/api/classes/${classId}/lectures/${created.body.id}/status`);
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('pending');
     });
 
     it('returns 404 for unknown lecture', async () => {
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/bad/status`);
+      const res = await get(`/api/classes/${classId}/lectures/bad/status`);
       expect(res.status).toBe(404);
     });
   });
@@ -193,18 +202,15 @@ describe('LecturesController', () => {
 
   describe('GET .../transcript', () => {
     it('returns 404 when no transcript exists', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${created.body.id}/transcript`);
+      const res = await get(`/api/classes/${classId}/lectures/${created.body.id}/transcript`);
       expect(res.status).toBe(404);
     });
 
     it('returns transcript text when file exists', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
@@ -212,8 +218,7 @@ describe('LecturesController', () => {
       mkdirSync(dir, { recursive: true });
       writeFileSync(path.join(dir, 'transcript.txt'), 'Hello transcript');
 
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${id}/transcript`);
+      const res = await get(`/api/classes/${classId}/lectures/${id}/transcript`);
       expect(res.status).toBe(200);
       expect(res.text).toBe('Hello transcript');
     });
@@ -221,24 +226,20 @@ describe('LecturesController', () => {
 
   describe('GET .../summary', () => {
     it('returns 404 when no summary exists', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${created.body.id}/summary`);
+      const res = await get(`/api/classes/${classId}/lectures/${created.body.id}/summary`);
       expect(res.status).toBe(404);
     });
   });
 
   describe('GET .../summaries', () => {
     it('returns empty versions when no summaries', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${created.body.id}/summaries`);
+      const res = await get(`/api/classes/${classId}/lectures/${created.body.id}/summaries`);
       expect(res.status).toBe(200);
       expect(res.body.versions).toEqual([]);
       expect(res.body.currentSummary).toBeNull();
@@ -249,18 +250,15 @@ describe('LecturesController', () => {
 
   describe('POST .../summarize', () => {
     it('returns 400 when no transcript exists', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${created.body.id}/summarize`);
+      const res = await post(`/api/classes/${classId}/lectures/${created.body.id}/summarize`);
       expect(res.status).toBe(400);
     });
 
     it('streams SSE events and saves summary when transcript exists', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
@@ -268,8 +266,8 @@ describe('LecturesController', () => {
       mkdirSync(dir, { recursive: true });
       writeFileSync(path.join(dir, 'transcript.txt'), 'Test transcript for summarization');
 
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/summarize`)
+      const res = await post(`/api/classes/${classId}/lectures/${id}/summarize`)
+        .send({ geminiApiKey: 'test-gemini-key' })
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -283,14 +281,12 @@ describe('LecturesController', () => {
       expect(done.status).toBe('summarized');
       expect(done.summary).toBe('Mock summary content');
 
-      const statusRes = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${id}/status`);
+      const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('summarized');
     });
 
     it('reverts status to transcribed with lastError when summarization throws', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
@@ -302,8 +298,8 @@ describe('LecturesController', () => {
         mergeSummaries: jest.fn().mockRejectedValue(new Error('Summarizer failed')),
       });
 
-      await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/summarize`)
+      await post(`/api/classes/${classId}/lectures/${id}/summarize`)
+        .send({ geminiApiKey: 'test-gemini-key' })
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -311,74 +307,9 @@ describe('LecturesController', () => {
           response.on('end', () => callback(null, data));
         });
 
-      const statusRes = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${id}/status`);
+      const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('transcribed');
       expect(statusRes.body.lastError).toBe('Summarizer failed');
-    });
-  });
-
-  // ── Q&A ────────────────────────────────────────────────────────────────────
-
-  describe('GET .../qa', () => {
-    it('returns empty rounds when no qa.json exists', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${created.body.id}/qa`);
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual({ rounds: [] });
-    });
-  });
-
-  describe('POST .../qa/generate', () => {
-    it('returns 400 when no summary exists', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${created.body.id}/qa/generate`);
-      expect(res.status).toBe(400);
-    });
-
-    it('generates questions from summary and saves a Q&A round', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-      const id = created.body.id;
-
-      storage.saveSummaryVersion(classId, id, 'Test summary', 'gemini');
-
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/qa/generate`);
-      expect(res.status).toBe(201);
-      expect(res.body.questions).toHaveLength(3);
-      expect(res.body.roundIndex).toBe(0);
-      expect(mockQa.generateQuestions).toHaveBeenCalledWith('Test summary');
-    });
-  });
-
-  describe('POST .../qa/answer', () => {
-    it('evaluates answers and returns feedback', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-      const id = created.body.id;
-
-      storage.saveSummaryVersion(classId, id, 'Test summary', 'gemini');
-      await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/qa/generate`);
-
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/qa/answer`)
-        .send({ roundIndex: 0, answers: ['Answer 1', 'Answer 2', 'Answer 3'] });
-
-      expect(res.status).toBe(201);
-      expect(res.body.feedback).toHaveLength(3);
-      expect(res.body.feedback[0].correct).toBe(true);
     });
   });
 
@@ -386,13 +317,12 @@ describe('LecturesController', () => {
 
   describe('POST .../transcribe', () => {
     it('streams SSE events and sets status to transcribed on success', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/transcribe`)
+      const res = await post(`/api/classes/${classId}/lectures/${id}/transcribe`)
+        .send({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' })
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -405,21 +335,19 @@ describe('LecturesController', () => {
       expect(done).toBeDefined();
       expect(done.status).toBe('transcribed');
 
-      const statusRes = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${id}/status`);
+      const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('transcribed');
     });
 
     it('streams error event and reverts status to pending with lastError when download throws', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
       mockDownload.extractVideoUrl.mockRejectedValueOnce(new Error('Login failed'));
 
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${id}/transcribe`)
+      const res = await post(`/api/classes/${classId}/lectures/${id}/transcribe`)
+        .send({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' })
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -432,10 +360,33 @@ describe('LecturesController', () => {
       expect(errorEvent).toBeDefined();
       expect(errorEvent.message).toBe('Login failed');
 
-      const statusRes = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${id}/status`);
+      const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('pending');
       expect(statusRes.body.lastError).toBe('Login failed');
+    });
+
+    it('rejects transcribe with 429 while the same user already holds the job slot, but allows another user', async () => {
+      const lecture = await post(`/api/classes/${classId}/lectures`).send({ name: 'L1', url: 'https://example.com/1' });
+
+      expect(tryAcquireJobSlot(USER_A)).toBe(true); // simulate a job already in flight for this user
+
+      const sameUserRes = await post(`/api/classes/${classId}/lectures/${lecture.body.id}/transcribe`, USER_A)
+        .send({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' });
+      expect(sameUserRes.status).toBe(429);
+
+      const otherClass = await post('/api/classes', USER_B).send({ name: 'B Class' });
+      const otherLecture = await post(`/api/classes/${otherClass.body.id}/lectures`, USER_B).send({ name: 'L', url: 'https://example.com/3' });
+      const otherUserRes = await post(`/api/classes/${otherClass.body.id}/lectures/${otherLecture.body.id}/transcribe`, USER_B)
+        .send({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' })
+        .buffer(true)
+        .parse((response, callback) => {
+          let data = '';
+          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          response.on('end', () => callback(null, data));
+        });
+      expect(otherUserRes.status).not.toBe(429);
+
+      releaseJobSlot(USER_A);
     });
   });
 
@@ -443,25 +394,21 @@ describe('LecturesController', () => {
 
   describe('GET .../summaries/:summaryId', () => {
     it('returns 404 for unknown summary id', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${created.body.id}/summaries/nonexistent`);
+      const res = await get(`/api/classes/${classId}/lectures/${created.body.id}/summaries/nonexistent`);
       expect(res.status).toBe(404);
     });
 
     it('returns summary text for a known summary id', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
       const summaryId = storage.saveSummaryVersion(classId, id, 'Version content', 'gemini');
 
-      const res = await request(app.getHttpServer())
-        .get(`/api/classes/${classId}/lectures/${id}/summaries/${summaryId}`);
+      const res = await get(`/api/classes/${classId}/lectures/${id}/summaries/${summaryId}`);
       expect(res.status).toBe(200);
       expect(res.text).toBe('Version content');
     });
@@ -469,25 +416,21 @@ describe('LecturesController', () => {
 
   describe('DELETE .../summaries/:summaryId', () => {
     it('returns 404 for unknown summary id', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .delete(`/api/classes/${classId}/lectures/${created.body.id}/summaries/nonexistent`);
+      const res = await del(`/api/classes/${classId}/lectures/${created.body.id}/summaries/nonexistent`);
       expect(res.status).toBe(404);
     });
 
     it('deletes a summary version', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
       const summaryId = storage.saveSummaryVersion(classId, id, 'to delete', 'gemini');
 
-      const res = await request(app.getHttpServer())
-        .delete(`/api/classes/${classId}/lectures/${id}/summaries/${summaryId}`);
+      const res = await del(`/api/classes/${classId}/lectures/${id}/summaries/${summaryId}`);
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(true);
 
@@ -500,23 +443,19 @@ describe('LecturesController', () => {
 
   describe('POST .../abort', () => {
     it('returns 400 when type is invalid', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${created.body.id}/abort`)
+      const res = await post(`/api/classes/${classId}/lectures/${created.body.id}/abort`)
         .send({ type: 'invalid' });
       expect(res.status).toBe(400);
     });
 
     it('returns 404 when no active job', async () => {
-      const created = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures`)
+      const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
 
-      const res = await request(app.getHttpServer())
-        .post(`/api/classes/${classId}/lectures/${created.body.id}/abort`)
+      const res = await post(`/api/classes/${classId}/lectures/${created.body.id}/abort`)
         .send({ type: 'transcribe' });
       expect(res.status).toBe(404);
     });

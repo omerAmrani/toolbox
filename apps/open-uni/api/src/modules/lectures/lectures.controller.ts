@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { EventEmitter } from 'events';
@@ -7,18 +7,32 @@ import { LecturesService } from './lectures.service';
 import { StorageService } from '../storage/storage.service';
 import { DownloadService } from '../download/download.service';
 import { SummarizeService } from '../summarize/summarize.service';
-import { QaService } from '../qa/qa.service';
 import { SUMMARIZE_BACKEND, GEMINI_MODEL, CLAUDE_MODEL } from '../../config';
+import { OpalCredentials } from '../../credentials';
+import { CurrentUser } from '../../common/current-user.decorator';
+import { JwtAuthGuard } from '../../common/jwt-auth.guard';
+import { tryAcquireJobSlot, releaseJobSlot } from '../../job-guard';
 
 @Controller('api/classes')
+@UseGuards(JwtAuthGuard)
 export class LecturesController {
   constructor(
     private readonly lecturesService: LecturesService,
     private readonly storage: StorageService,
     private readonly download: DownloadService,
     private readonly summarizeService: SummarizeService,
-    private readonly qa: QaService,
   ) {}
+
+  // Ownership gate: every endpoint below touches a classId, so every one
+  // must confirm the caller owns that class before doing anything else.
+  // A mismatch reads as 404, same as a missing class.
+  private requireOwnedClass(classId: string, userId: string, res: Response): boolean {
+    if (!this.storage.getClassForUser(classId, userId)) {
+      res.status(404).json({ error: 'Class not found' });
+      return false;
+    }
+    return true;
+  }
 
   private requireLecture(classId: string, lectureId: string, res: Response) {
     const lecture = this.storage.getLecture(classId, lectureId);
@@ -45,27 +59,29 @@ export class LecturesController {
   // ── Lectures CRUD ─────────────────────────────────────────────────────────────
 
   @Get(':classId/lectures')
-  getLectures(@Param('classId') classId: string, @Res() res: Response) {
-    if (!this.storage.getClass(classId)) return res.status(404).json({ error: 'Class not found' });
+  getLectures(@CurrentUser() userId: string, @Param('classId') classId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     res.json(this.storage.getLectures(classId));
   }
 
   @Post(':classId/lectures')
-  createLecture(@Param('classId') classId: string, @Body() body: any, @Res() res: Response) {
-    if (!this.storage.getClass(classId)) return res.status(404).json({ error: 'Class not found' });
+  createLecture(@CurrentUser() userId: string, @Param('classId') classId: string, @Body() body: any, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     const { name, url, lectureDate } = body;
     if (!name || !url) return res.status(400).json({ error: 'name and url required' });
     res.status(201).json(this.storage.createLecture(classId, { name, url, lectureDate, status: 'pending' }));
   }
 
   @Delete(':classId/lectures/:lectureId')
-  deleteLecture(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+  deleteLecture(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     if (!this.storage.deleteLecture(classId, lectureId)) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   }
 
   @Patch(':classId/lectures/:lectureId')
-  updateLecture(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Body() body: any, @Res() res: Response) {
+  updateLecture(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Body() body: any, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     if (!this.requireLecture(classId, lectureId, res)) return;
     const { name, lectureDate } = body;
     const updates: Record<string, any> = {};
@@ -77,77 +93,42 @@ export class LecturesController {
   // ── Status ───────────────────────────────────────────────────────────────────
 
   @Get(':classId/lectures/:lectureId/status')
-  getLectureStatus(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+  getLectureStatus(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     const lecture = this.requireLecture(classId, lectureId, res);
     if (!lecture) return;
     res.json(lecture);
-  }
-
-  // ── Q&A ─────────────────────────────────────────────────────────────────────
-
-  @Get(':classId/lectures/:lectureId/qa')
-  getQA(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
-    if (!this.requireLecture(classId, lectureId, res)) return;
-    const p = path.join(this.storage.lectureDirPath(classId, lectureId), 'qa.json');
-    if (!existsSync(p)) return res.json({ rounds: [] });
-    res.json(JSON.parse(readFileSync(p, 'utf8')));
-  }
-
-  @Post(':classId/lectures/:lectureId/qa/generate')
-  async generateQA(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
-    if (!this.requireLecture(classId, lectureId, res)) return;
-    const summaryContent = this.storage.getCurrentSummaryContent(classId, lectureId);
-    if (!summaryContent) return res.status(400).json({ error: 'אין סיכום — צור סיכום תחילה' });
-    try {
-      const questions = await this.qa.generateQuestions(summaryContent);
-      const p = path.join(this.storage.lectureDirPath(classId, lectureId), 'qa.json');
-      const qa = existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : { rounds: [] };
-      qa.rounds.push({ questions, answers: [], feedback: [], timestamp: new Date().toISOString() });
-      writeFileSync(p, JSON.stringify(qa, null, 2));
-      res.json({ questions, roundIndex: qa.rounds.length - 1 });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  }
-
-  @Post(':classId/lectures/:lectureId/qa/answer')
-  async answerQA(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Body() body: any, @Res() res: Response) {
-    const { roundIndex, answers } = body;
-    if (!this.requireLecture(classId, lectureId, res)) return;
-    const p = path.join(this.storage.lectureDirPath(classId, lectureId), 'qa.json');
-    if (!existsSync(p)) return res.status(400).json({ error: 'אין סשן Q&A פעיל' });
-    const qa = JSON.parse(readFileSync(p, 'utf8'));
-    const round = qa.rounds[roundIndex];
-    if (!round) return res.status(400).json({ error: 'סיבוב לא נמצא' });
-    try {
-      const feedback = await this.qa.evaluateAnswers(round.questions, answers);
-      round.answers = answers;
-      round.feedback = feedback;
-      writeFileSync(p, JSON.stringify(qa, null, 2));
-      res.json({ feedback });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
   }
 
   // ── Transcribe (SSE) ──────────────────────────────────────────────────────────
 
   @Post(':classId/lectures/:lectureId/transcribe')
   async transcribe(
+    @CurrentUser() userId: string,
     @Param('classId') classId: string,
     @Param('lectureId') lectureId: string,
     @Body() body: any,
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     const lecture = this.requireLecture(classId, lectureId, res);
     if (!lecture) return;
+
+    const { opalUsername, opalPassword, opalId, groqApiKey } = body || {};
+    if (!opalUsername || !opalPassword || !opalId) return res.status(400).json({ error: 'OPAL credentials required' });
+    if (!groqApiKey) return res.status(400).json({ error: 'groqApiKey required' });
+    const opalCredentials: OpalCredentials = { username: opalUsername, password: opalPassword, id: opalId };
 
     const key = `${classId}/${lectureId}`;
 
     if (this.lecturesService.activeJobs.has(key)) {
       this.attachSSEClient(this.lecturesService.activeJobs.get(key)!.bus!, res, req);
       return;
+    }
+
+    if (!tryAcquireJobSlot(userId)) {
+      return res.status(429).json({ error: 'כבר יש עבודה פעילה אחת בתהליך. המתן לסיומה.' });
     }
 
     const bus = new EventEmitter();
@@ -167,6 +148,7 @@ export class LecturesController {
       broadcast({ type: 'progress', step: 'login', message: 'מתחבר לאוניברסיטה הפתוחה...' });
       const videoUrl = await this.download.extractVideoUrl(
         lecture.url,
+        opalCredentials,
         (msg: string) => broadcast({ type: 'progress', step: 'login', message: msg }),
         controller.signal,
       );
@@ -175,6 +157,7 @@ export class LecturesController {
       const maxDuration = body?.test ? 1800 : null;
       const transcript = await this.download.downloadAndTranscribe(
         videoUrl,
+        groqApiKey,
         (msg: string) => broadcast({ type: 'progress', step: 'transcribe', message: msg }),
         null,
         mp3Path,
@@ -207,6 +190,7 @@ export class LecturesController {
       broadcast({ type: aborted ? 'aborted' : 'error', message: err.message });
     } finally {
       this.lecturesService.activeJobs.delete(key);
+      releaseJobSlot(userId);
       bus.emit('end');
     }
   }
@@ -215,11 +199,13 @@ export class LecturesController {
 
   @Post(':classId/lectures/:lectureId/summarize')
   async summarize(
+    @CurrentUser() userId: string,
     @Param('classId') classId: string,
     @Param('lectureId') lectureId: string,
     @Body() body: any,
     @Res() res: Response,
   ) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     if (!this.requireLecture(classId, lectureId, res)) return;
 
     const dir = this.storage.lectureDirPath(classId, lectureId);
@@ -229,9 +215,12 @@ export class LecturesController {
       return res.status(400).json({ error: 'No transcript found. Run transcription first.' });
     }
 
-    const send = this.startSSE(res);
     const backend = body?.backend;
     const usedBackend = backend || SUMMARIZE_BACKEND;
+    const apiKey = usedBackend === 'claude' ? body?.anthropicApiKey : body?.geminiApiKey;
+    if (!apiKey) return res.status(400).json({ error: `${usedBackend === 'claude' ? 'anthropicApiKey' : 'geminiApiKey'} required` });
+
+    const send = this.startSSE(res);
     const key = `${classId}/${lectureId}`;
 
     const controller = new AbortController();
@@ -249,6 +238,7 @@ export class LecturesController {
       const summary = await this.summarizeService.withAbort(
         mergeSummaries(
           [transcript],
+          apiKey,
           (msg: string) => send({ type: 'progress', step: 'summarize', message: msg }),
           (token: string) => send({ type: 'token', token }),
         ),
@@ -288,7 +278,8 @@ export class LecturesController {
   // ── Abort ─────────────────────────────────────────────────────────────────────
 
   @Post(':classId/lectures/:lectureId/abort')
-  abortLecture(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Body() body: any, @Res() res: Response) {
+  abortLecture(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Body() body: any, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     const { type } = body;
     if (!type || !['transcribe', 'summarize'].includes(type)) {
       return res.status(400).json({ error: 'type must be transcribe or summarize' });
@@ -302,34 +293,39 @@ export class LecturesController {
   // ── Files ─────────────────────────────────────────────────────────────────────
 
   @Get(':classId/lectures/:lectureId/transcript')
-  getTranscript(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+  getTranscript(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     const p = path.join(this.storage.lectureDirPath(classId, lectureId), 'transcript.txt');
     if (!existsSync(p)) return res.status(404).json({ error: 'No transcript' });
     res.type('text/plain').send(readFileSync(p, 'utf8'));
   }
 
   @Get(':classId/lectures/:lectureId/summary')
-  getSummary(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+  getSummary(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     const content = this.storage.getCurrentSummaryContent(classId, lectureId);
     if (content === null) return res.status(404).json({ error: 'No summary' });
     res.type('text/plain').send(content);
   }
 
   @Get(':classId/lectures/:lectureId/summaries')
-  getSummaries(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+  getSummaries(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     if (!this.requireLecture(classId, lectureId, res)) return;
     res.json(this.storage.getSummaryVersions(classId, lectureId));
   }
 
   @Get(':classId/lectures/:lectureId/summaries/:summaryId')
-  getSummaryById(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Param('summaryId') summaryId: string, @Res() res: Response) {
+  getSummaryById(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Param('summaryId') summaryId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     const content = this.storage.getSummaryContent(classId, lectureId, summaryId);
     if (content === null) return res.status(404).json({ error: 'Not found' });
     res.type('text/plain').send(content);
   }
 
   @Delete(':classId/lectures/:lectureId/summaries/:summaryId')
-  deleteSummary(@Param('classId') classId: string, @Param('lectureId') lectureId: string, @Param('summaryId') summaryId: string, @Res() res: Response) {
+  deleteSummary(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Param('summaryId') summaryId: string, @Res() res: Response) {
+    if (!this.requireOwnedClass(classId, userId, res)) return;
     if (!this.storage.deleteSummaryVersion(classId, lectureId, summaryId)) return res.status(404).json({ error: 'Not found' });
     res.json({ ok: true });
   }

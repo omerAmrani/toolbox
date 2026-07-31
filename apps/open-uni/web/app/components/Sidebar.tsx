@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { apiUrl } from '@/lib/api';
+import { apiFetch, apiUrl } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { sortBySemester, useSelectedSemester } from '@/lib/selectedSemester';
 import NewCourseModal from '@/app/components/NewCourseModal';
@@ -21,9 +21,10 @@ export default function Sidebar() {
   const router = useRouter();
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
 
   const loadClasses = () => {
-    fetch(apiUrl('/api/classes'))
+    apiFetch('/api/classes')
       .then((r) => r.json())
       .then((data) => setClasses(Array.isArray(data) ? data : []))
       .catch(() => {});
@@ -31,7 +32,16 @@ export default function Sidebar() {
 
   useEffect(() => {
     loadClasses();
+    apiFetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setEmail(data?.email ?? null))
+      .catch(() => {});
   }, []);
+
+  const logout = async () => {
+    await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' });
+    router.push('/login');
+  };
 
   const selectedSemesterKey = useSelectedSemester();
   const sortedClasses = useMemo(() => sortBySemester(classes), [classes]);
@@ -113,13 +123,14 @@ export default function Sidebar() {
           );
         })}
       </div>
-      <div className="sb__me">
-        <div className="sb__avatar">פ</div>
+      <button type="button" className="sb__me" onClick={logout} title="התנתקות">
+        <div className="sb__avatar">{email?.[0]?.toUpperCase() || '?'}</div>
         <div className="sb__metxt">
-          —<br />
-          <small>חיבור לא מוגדר</small>
+          {email || '—'}
+          <br />
+          <small>התנתקות</small>
         </div>
-      </div>
+      </button>
 
       <NewCourseModal
         open={modalOpen}

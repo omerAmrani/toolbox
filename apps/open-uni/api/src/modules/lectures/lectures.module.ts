@@ -4,10 +4,10 @@ import { LecturesService } from './lectures.service';
 import { StorageModule } from '../storage/storage.module';
 import { DownloadModule } from '../download/download.module';
 import { SummarizeModule } from '../summarize/summarize.module';
-import { QaModule } from '../qa/qa.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [StorageModule, DownloadModule, SummarizeModule, QaModule],
+  imports: [StorageModule, DownloadModule, SummarizeModule, AuthModule],
   controllers: [LecturesController],
   providers: [LecturesService],
 })

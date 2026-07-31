@@ -3,9 +3,9 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { HealthModule } from '../src/modules/health/health.module';
 
-// SDK constructors are mocked so no real API calls are made.
-// GEMINI_API_KEY and ANTHROPIC_API_KEY are set to 'dummy' in .env.test so the
-// controller sees a truthy key and proceeds to call the (mocked) SDK.
+// SDK constructors are mocked so no real API calls are made. Credentials are
+// no longer read from env/settings — the client sends the key to check with
+// each request (see docs/health.md).
 
 const mockGenerate = jest.fn();
 const mockGetModel = jest.fn().mockReturnValue({ generateContent: mockGenerate });
@@ -42,35 +42,6 @@ describe('HealthController', () => {
     jest.clearAllMocks();
   });
 
-  describe('GET /health/features', () => {
-    it('returns an entry for every known feature', async () => {
-      const res = await request(app.getHttpServer()).get('/health/features');
-      expect(res.status).toBe(200);
-      expect(Array.isArray(res.body)).toBe(true);
-      const features = res.body.map((f: any) => f.feature);
-      expect(features).toContain('transcription');
-      expect(features).toContain('summarization');
-      expect(features).toContain('lecture-download');
-      expect(features).toContain('email-notifications');
-    });
-
-    it('returns only feature and available fields — no env var names', async () => {
-      const res = await request(app.getHttpServer()).get('/health/features');
-      for (const entry of res.body) {
-        expect(Object.keys(entry).sort()).toEqual(['available', 'feature']);
-      }
-    });
-
-    it('reports features with keys set as available, and email-notifications as unavailable (not in env.test)', async () => {
-      const res = await request(app.getHttpServer()).get('/health/features');
-      const byName = Object.fromEntries(res.body.map((f: any) => [f.feature, f.available]));
-      expect(byName['transcription']).toBe(true);
-      expect(byName['summarization']).toBe(true);
-      expect(byName['lecture-download']).toBe(true);
-      expect(byName['email-notifications']).toBe(false);
-    });
-  });
-
   describe('GET /health/ping', () => {
     it('returns ok:true with no auth or external calls', async () => {
       const res = await request(app.getHttpServer()).get('/health/ping');
@@ -79,11 +50,18 @@ describe('HealthController', () => {
     });
   });
 
-  describe('GET /health/gemini', () => {
+  describe('POST /health/gemini', () => {
+    it('returns configured:false when no apiKey is sent', async () => {
+      const res = await request(app.getHttpServer()).post('/health/gemini').send({});
+      expect(res.status).toBe(200);
+      expect(res.body.configured).toBe(false);
+      expect(res.body.ok).toBe(false);
+    });
+
     it('returns ok:true with latency when API responds', async () => {
       mockGenerate.mockResolvedValue({ response: { text: () => 'ok' } });
 
-      const res = await request(app.getHttpServer()).get('/health/gemini');
+      const res = await request(app.getHttpServer()).post('/health/gemini').send({ apiKey: 'test-key' });
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(true);
       expect(res.body.configured).toBe(true);
@@ -94,7 +72,7 @@ describe('HealthController', () => {
     it('returns ok:false with error message when API throws', async () => {
       mockGenerate.mockRejectedValue(new Error('quota exceeded'));
 
-      const res = await request(app.getHttpServer()).get('/health/gemini');
+      const res = await request(app.getHttpServer()).post('/health/gemini').send({ apiKey: 'test-key' });
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(false);
       expect(res.body.configured).toBe(true);
@@ -102,11 +80,11 @@ describe('HealthController', () => {
     });
   });
 
-  describe('GET /health/claude', () => {
+  describe('POST /health/claude', () => {
     it('returns ok:true with latency when API responds', async () => {
       mockMessagesCreate.mockResolvedValue({ content: [{ text: 'ok' }] });
 
-      const res = await request(app.getHttpServer()).get('/health/claude');
+      const res = await request(app.getHttpServer()).post('/health/claude').send({ apiKey: 'test-key' });
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(true);
       expect(res.body.configured).toBe(true);
@@ -117,7 +95,7 @@ describe('HealthController', () => {
     it('returns ok:false with error message when API throws', async () => {
       mockMessagesCreate.mockRejectedValue(new Error('invalid api key'));
 
-      const res = await request(app.getHttpServer()).get('/health/claude');
+      const res = await request(app.getHttpServer()).post('/health/claude').send({ apiKey: 'test-key' });
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(false);
       expect(res.body.configured).toBe(true);

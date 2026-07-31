@@ -1,21 +1,22 @@
 import Groq from 'groq-sdk';
 import fs from 'fs';
-import { GROQ_API_KEY, WHISPER_PROMPT } from '../../../config';
+import { WHISPER_PROMPT } from '../../../config';
 
-function getClient(): Groq {
-  if (!GROQ_API_KEY) throw new Error('GROQ_API_KEY not set in .env');
-  return new Groq({ apiKey: GROQ_API_KEY });
+function getClient(apiKey: string): Groq {
+  if (!apiKey) throw new Error('Groq API key required for transcription');
+  return new Groq({ apiKey });
 }
 
 async function waitMs(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export async function transcribe(audioPath: string, retries = 5): Promise<{ text: string; segments: { startSec: number; text: string }[] }> {
+export async function transcribe(audioPath: string, apiKey: string, retries = 5): Promise<{ text: string; segments: { startSec: number; text: string }[] }> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const fileStream = fs.createReadStream(audioPath);
-      const transcription = await getClient().audio.transcriptions.create({
+      fileStream.on('error', () => {});
+      const transcription = await getClient(apiKey).audio.transcriptions.create({
         file: fileStream,
         model: 'whisper-large-v3-turbo',
         language: 'he',
@@ -42,7 +43,7 @@ export async function transcribe(audioPath: string, retries = 5): Promise<{ text
         continue;
       }
       if (err?.status === 401) {
-        throw new Error('Groq API key invalid or expired — check GROQ_API_KEY in .env');
+        throw new Error('Groq API key invalid or expired');
       }
       throw err;
     }

@@ -177,6 +177,49 @@ input, select, textarea { font: inherit; color: inherit; }
 }
 .select-field--full { width: 100%; }
 
+.text-field {
+  padding: 9px 16px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font: 500 0.85rem/1.2 var(--font-ui);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.text-field:hover {
+  border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+}
+.text-field:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.text-field--full { width: 100%; }
+
+.cred-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.cred-section__title {
+  font: 700 0.8rem/1.2 var(--font-ui);
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.cred-field { margin-bottom: 10px; }
+.cred-field__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.cred-divider {
+  border-top: 1px solid var(--line);
+  margin: 18px 0 14px;
+}
+
 .select-pop {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1997,6 +2040,7 @@ button.sb__item { border: none; background: none; }
   /* ── settings ─────────────────────────────────────────────────────── */
   .settings-grid { grid-template-columns: 1fr; }
   .set-card { padding: 22px; }
+  .cred-grid { grid-template-columns: 1fr; gap: 4px; }
   .model { grid-template-columns: 40px 1fr; padding: 16px; }
   .model__stat { grid-column: 2; text-align: start; margin-top: 4px; }
   .account {

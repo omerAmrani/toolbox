@@ -1,19 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { buildPrompt, summarizeChunk, TRUNCATION_WARNING, SYSTEM_PROMPT } from './prompt';
-import { MERGE_MAX_TOKENS, CLAUDE_MODEL, ANTHROPIC_API_KEY } from '../../../config';
+import { buildPrompt, TRUNCATION_WARNING, SYSTEM_PROMPT } from './prompt';
+import { MERGE_MAX_TOKENS, CLAUDE_MODEL } from '../../../config';
 
-export { summarizeChunk };
-
-function getClient(): Anthropic {
-  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set in .env');
-  return new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+function getClient(apiKey: string): Anthropic {
+  if (!apiKey) throw new Error('Anthropic API key required for summarization');
+  return new Anthropic({ apiKey });
 }
 
-export async function mergeSummaries(chunks: string[], onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {
+export async function mergeSummaries(chunks: string[], apiKey: string, onProgress = (_: string) => {}, onToken: ((t: string) => void) | null = null): Promise<string> {
   const fullTranscript = chunks.join('\n\n');
   onProgress('מסכם עם Claude...');
 
-  const client = getClient();
+  const client = getClient(apiKey);
 
   if (onToken) {
     const stream = client.messages.stream({

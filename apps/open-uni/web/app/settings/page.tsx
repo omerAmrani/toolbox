@@ -1,26 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { apiUrl } from '@/lib/api';
+import { apiUrl, apiFetch } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
 import { Button } from '@/app/components/Button';
 import { Select } from '@/app/components/Select';
 import { SEMESTER_HE } from '@/lib/status';
 import {SEMESTER_ORDER, getSelectedSemester, setSelectedSemester} from '@/lib/selectedSemester';
+import { StoredCredentials, SecretKey, hasStoredCredentials, saveCredentials as saveCredentialsLocal, clearStoredCredentials, requireCredentials, getUnlocked, getPlainFields, getSecretFlags } from '@/lib/credentials';
 
 interface DataDirInfo {
   current: string;
   configured: string | null;
   hasDb: boolean;
 }
-
-interface CronSchedule {
-  days: number[];
-  hour: number;
-  minute: number;
-}
-
-const DAY_LABELS = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 
 interface ClassRow {
   id: string;
@@ -61,6 +54,31 @@ const MODELS: { key: ModelKey; emoji: string; name: string; sub: string; role: s
   { key: 'claude', emoji: 'C', name: 'Claude', sub: 'Anthropic · claude-haiku-4-5-20251001', role: 'סיכומים' },
 ];
 
+type CredentialField = { key: keyof StoredCredentials; label: string; secret: boolean };
+
+// Right column (RTL) — OpenU login, plain ID/username + one secret password.
+const OPAL_FIELDS: CredentialField[] = [
+  { key: 'opalId', label: 'תעודת זהות', secret: false },
+  { key: 'opalUsername', label: 'שם משתמש', secret: false },
+  { key: 'opalPassword', label: 'סיסמה', secret: true },
+];
+// Left column (RTL) — AI provider API keys, all secret.
+const API_KEY_FIELDS: CredentialField[] = [
+  { key: 'groqApiKey', label: 'Groq (תמלול)', secret: true },
+  { key: 'geminiApiKey', label: 'Gemini', secret: true },
+  { key: 'anthropicApiKey', label: 'Claude', secret: true },
+];
+const EMPTY_CREDENTIAL_DRAFT: StoredCredentials = {
+  opalUsername: '', opalId: '', opalPassword: '', groqApiKey: '', geminiApiKey: '', anthropicApiKey: '',
+};
+
+// Non-secret fields (username/ID) are stored unencrypted, so they always show
+// their real value; secret fields (password, API keys) never prefill — the
+// "already set" chip (driven by getSecretFlags()) is the only sign one has a value.
+function draftFromPlainFields(plain: { opalUsername: string; opalId: string }): StoredCredentials {
+  return { ...EMPTY_CREDENTIAL_DRAFT, opalUsername: plain.opalUsername, opalId: plain.opalId };
+}
+
 export default function SettingsPage() {
   const [dataDir, setDataDir] = useState<DataDirInfo | null>(null);
   const [pendingDataDir, setPendingDataDir] = useState<string | null>(null);
@@ -70,12 +88,6 @@ export default function SettingsPage() {
   const [savingDir, setSavingDir] = useState(false);
   const [reloadMsg, setReloadMsg] = useState('');
   const [reloading, setReloading] = useState(false);
-
-  const [scheduleDays, setScheduleDays] = useState<number[]>([4, 5]);
-  const [scheduleTime, setScheduleTime] = useState('10:00');
-  const [nextRun, setNextRun] = useState<string | null>(null);
-  const [savingSchedule, setSavingSchedule] = useState(false);
-  const [scheduleMsg, setScheduleMsg] = useState<{ msg: string; error?: boolean } | null>(null);
 
   const [emailDraft, setEmailDraft] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
@@ -90,6 +102,13 @@ export default function SettingsPage() {
     gemini: { status: 'idle', msg: 'לא נבדק' },
     claude: { status: 'idle', msg: 'לא נבדק' },
   });
+
+  const [credentialsStored, setCredentialsStored] = useState(false);
+  const [credentialDraft, setCredentialDraft] = useState<StoredCredentials>(EMPTY_CREDENTIAL_DRAFT);
+  const [secretFlags, setSecretFlags] = useState<Record<SecretKey, boolean>>(getSecretFlags);
+  const [passphraseDraft, setPassphraseDraft] = useState('');
+  const [savingCredentials, setSavingCredentials] = useState(false);
+  const [credentialsMsg, setCredentialsMsg] = useState<{ msg: string; error?: boolean } | null>(null);
 
   const loadDataDir = useCallback(async () => {
     try {
@@ -111,16 +130,6 @@ export default function SettingsPage() {
     });
   }, [syncSections]);
 
-  const loadCronSchedule = useCallback(async () => {
-    try {
-      const data: { schedule: CronSchedule; nextRun: string | null } =
-        await fetch(apiUrl('/api/classes/cron-schedule')).then((r) => r.json());
-      setScheduleDays(data.schedule.days);
-      setScheduleTime(`${String(data.schedule.hour).padStart(2, '0')}:${String(data.schedule.minute).padStart(2, '0')}`);
-      setNextRun(data.nextRun);
-    } catch { /* ignore */ }
-  }, []);
-
   const loadNotifyEmail = useCallback(async () => {
     try {
       const data: { email: string | null } = await fetch(apiUrl('/api/classes/notify-email')).then((r) => r.json());
@@ -130,7 +139,7 @@ export default function SettingsPage() {
 
   const initSyncPanel = useCallback(async () => {
     try {
-      const classes: ClassRow[] = await fetch(apiUrl('/api/classes')).then((r) => r.json());
+      const classes: ClassRow[] = await apiFetch('/api/classes').then((r) => r.json());
       const linked = classes.filter((c) => c.opalCourseUrl);
       setSyncSections(linked.map((cls) => ({
         classId: cls.id, className: cls.name, semester: cls.semester, year: cls.year, newLectures: [] as NewLecture[],
@@ -174,33 +183,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadDataDir();
-    loadCronSchedule();
     loadNotifyEmail();
+    setCredentialsStored(hasStoredCredentials());
+    setCredentialDraft(draftFromPlainFields(getPlainFields()));
+    setSecretFlags(getSecretFlags());
     initSyncPanel();
-  }, [loadDataDir, loadCronSchedule, loadNotifyEmail, initSyncPanel]);
-
-  const toggleScheduleDay = (day: number) => {
-    setScheduleDays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]).sort((a, b) => a - b));
-  };
-
-  const saveSchedule = async () => {
-    if (!scheduleDays.length) { setScheduleMsg({ msg: 'יש לבחור לפחות יום אחד', error: true }); return; }
-    setSavingSchedule(true);
-    setScheduleMsg(null);
-    try {
-      const [hour, minute] = scheduleTime.split(':').map(Number);
-      const res = await fetch(apiUrl('/api/classes/cron-schedule'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ days: scheduleDays, hour, minute }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setScheduleMsg({ msg: data.error || 'שגיאה', error: true }); return; }
-      setNextRun(data.nextRun);
-      setScheduleMsg({ msg: 'התזמון נשמר' });
-    } catch { setScheduleMsg({ msg: 'שגיאת רשת', error: true }); }
-    finally { setSavingSchedule(false); }
-  };
+  }, [loadDataDir, loadNotifyEmail, initSyncPanel]);
 
   const saveNotifyEmail = async () => {
     setSavingEmail(true);
@@ -217,6 +205,40 @@ export default function SettingsPage() {
       setEmailMsg({ msg: 'הכתובת נשמרה' });
     } catch { setEmailMsg({ msg: 'שגיאת רשת', error: true }); }
     finally { setSavingEmail(false); }
+  };
+
+  const saveCredentials = async () => {
+    if (!passphraseDraft.trim()) { setCredentialsMsg({ msg: 'יש להזין סיסמת הצפנה', error: true }); return; }
+    setSavingCredentials(true);
+    setCredentialsMsg(null);
+    try {
+      // ponytail: a blank secret field means "leave as-is", not "clear it" — but
+      // that only works if we already have the old values in memory (unlocked
+      // this session). If the store was never unlocked, a blank field really
+      // does get saved blank; upgrade path is prompting to unlock before save.
+      const previouslyUnlocked = getUnlocked();
+      const toSave: StoredCredentials = { ...credentialDraft };
+      for (const key of ['opalPassword', 'groqApiKey', 'geminiApiKey', 'anthropicApiKey'] as SecretKey[]) {
+        if (!toSave[key] && previouslyUnlocked) toSave[key] = previouslyUnlocked[key];
+      }
+
+      await saveCredentialsLocal(passphraseDraft, toSave);
+      setCredentialsStored(true);
+      setCredentialDraft(draftFromPlainFields(getPlainFields()));
+      setSecretFlags(getSecretFlags());
+      setPassphraseDraft('');
+      setCredentialsMsg({ msg: 'הפרטים נשמרו' });
+    } catch { setCredentialsMsg({ msg: 'שגיאה בהצפנה', error: true }); }
+    finally { setSavingCredentials(false); }
+  };
+
+  const clearCredentials = () => {
+    if (!confirm('למחוק את פרטי הגישה השמורים בדפדפן זה?')) return;
+    clearStoredCredentials();
+    setCredentialsStored(false);
+    setCredentialDraft(EMPTY_CREDENTIAL_DRAFT);
+    setSecretFlags(getSecretFlags());
+    setCredentialsMsg({ msg: 'הפרטים נמחקו' });
   };
 
   const pickDataDir = async () => {
@@ -261,8 +283,9 @@ export default function SettingsPage() {
     setSyncing(true);
     setSyncProgress('מתחיל...');
     try {
+      const creds = await requireCredentials();
       const selected = semesterOptions.find((o) => o.key === selectedSemesterKey);
-      const body = selected ? { semester: selected.semester, year: selected.year } : {};
+      const body = { ...creds, ...(selected ? { semester: selected.semester, year: selected.year } : {}) };
       await streamSSE('/api/classes/sync', body, (ev) => {
         if (ev.type === 'progress') setSyncProgress(String(ev.message));
         else if (ev.type === 'class') {
@@ -279,8 +302,14 @@ export default function SettingsPage() {
   const testModel = async (key: ModelKey) => {
     setModels((m) => ({ ...m, [key]: { status: 'testing', msg: 'שולח בקשה...' } }));
     try {
+      const creds = await requireCredentials();
+      const apiKey = key === 'claude' ? creds.anthropicApiKey : creds.geminiApiKey;
       const data: { ok?: boolean; configured?: boolean; error?: string; ms?: number; response?: string } =
-        await fetch(apiUrl(`/health/${key}`)).then((r) => r.json());
+        await fetch(apiUrl(`/health/${key}`), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey }),
+        }).then((r) => r.json());
       if (!data.configured) {
         setModels((m) => ({ ...m, [key]: { status: 'warning', msg: data.error || 'מפתח API לא מוגדר' } }));
       } else if (data.ok) {
@@ -350,73 +379,32 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Schedule & notification card */}
-        <div className="set-card">
+        {/* Notification email card */}
+        <div className="set-card set-card--wide">
           <div className="set-card__h">
             <div>
-              <div className="set-card__title">תזמון בדיקה אוטומטית</div>
-              <div className="set-card__sub">
-                {nextRun ? `הרצה הבאה: ${new Date(nextRun).toLocaleString('he-IL')}` : '—'}
-              </div>
+              <div className="set-card__title">שליחת סיכומים למייל</div>
+              <div className="set-card__sub">כתובת לשליחת סיכום לאחר עיבוד הרצאה</div>
             </div>
           </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 6 }}>ימים</div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {DAY_LABELS.map((label, day) => (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => toggleScheduleDay(day)}
-                  className="btn btn--xs"
-                  style={scheduleDays.includes(day) ? { background: 'var(--accent)', color: '#fff' } : undefined}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>שעה</div>
+          <div style={{ display: 'flex', gap: 8 }}>
             <input
-              type="time"
-              value={scheduleTime}
-              onChange={(e) => setScheduleTime(e.target.value)}
-              className="select-field"
+              type="email"
+              value={emailDraft}
+              onChange={(e) => setEmailDraft(e.target.value)}
+              placeholder="you@example.com"
+              className="text-field text-field--full"
+              style={{ flex: 1 }}
             />
-            <Button onClick={saveSchedule} disabled={savingSchedule}>
-              {savingSchedule ? 'שומר...' : 'שמור תזמון'}
+            <Button onClick={saveNotifyEmail} disabled={savingEmail}>
+              {savingEmail ? 'שומר...' : 'שמור'}
             </Button>
           </div>
-          {scheduleMsg && (
-            <div style={{ marginTop: 8, fontSize: '0.82rem', color: scheduleMsg.error ? 'var(--danger)' : 'var(--good)' }}>
-              {scheduleMsg.msg}
+          {emailMsg && (
+            <div style={{ marginTop: 8, fontSize: '0.82rem', color: emailMsg.error ? 'var(--danger)' : 'var(--good)' }}>
+              {emailMsg.msg}
             </div>
           )}
-
-          <div style={{ paddingTop: 14, marginTop: 14, borderTop: '1px solid var(--line)' }}>
-            <div style={{ fontSize: '0.82rem', color: 'var(--muted)', marginBottom: 6 }}>שליחת סיכומים למייל</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="email"
-                value={emailDraft}
-                onChange={(e) => setEmailDraft(e.target.value)}
-                placeholder="you@example.com"
-                className="select-field select-field--full"
-                style={{ flex: 1 }}
-              />
-              <Button onClick={saveNotifyEmail} disabled={savingEmail}>
-                {savingEmail ? 'שומר...' : 'שמור'}
-              </Button>
-            </div>
-            {emailMsg && (
-              <div style={{ marginTop: 8, fontSize: '0.82rem', color: emailMsg.error ? 'var(--danger)' : 'var(--good)' }}>
-                {emailMsg.msg}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Storage card */}
@@ -464,6 +452,88 @@ export default function SettingsPage() {
             </Button>
             {reloadMsg && (
               <div style={{ marginTop: 6, fontSize: '0.82rem', color: 'var(--muted)' }}>{reloadMsg}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Credentials card */}
+        <div className="set-card">
+          <div className="set-card__h">
+            <div>
+              <div className="set-card__title">פרטי גישה</div>
+              <div className="set-card__sub">
+                האוניברסיטה הפתוחה ומפתחות API — מוצפן בדפדפן זה בלבד, לא נשמר בשרת
+                {credentialsStored ? ' · שמור' : ''}
+              </div>
+            </div>
+          </div>
+
+          <div className="cred-grid">
+            <div className="cred-section">
+              <div className="cred-section__title">האוניברסיטה הפתוחה</div>
+              {OPAL_FIELDS.map(({ key, label, secret }) => (
+                <div key={key} className="cred-field">
+                  <div className="cred-field__label">
+                    {label}
+                    {secret && secretFlags[key as SecretKey] && (
+                      <span className="chip chip--accent"><span className="chip__dot" />מוגדר</span>
+                    )}
+                  </div>
+                  <input
+                    type={secret ? 'password' : 'text'}
+                    value={credentialDraft[key]}
+                    onChange={(e) => setCredentialDraft((d) => ({ ...d, [key]: e.target.value }))}
+                    className="text-field text-field--full"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="cred-section">
+              <div className="cred-section__title">מפתחות API</div>
+              {API_KEY_FIELDS.map(({ key, label, secret }) => (
+                <div key={key} className="cred-field">
+                  <div className="cred-field__label">
+                    {label}
+                    {secret && secretFlags[key as SecretKey] && (
+                      <span className="chip chip--accent"><span className="chip__dot" />מוגדר</span>
+                    )}
+                  </div>
+                  <input
+                    type={secret ? 'password' : 'text'}
+                    value={credentialDraft[key]}
+                    onChange={(e) => setCredentialDraft((d) => ({ ...d, [key]: e.target.value }))}
+                    className="text-field text-field--full"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="cred-divider" />
+
+          <div className="cred-field">
+            <div className="cred-field__label">סיסמת הצפנה</div>
+            <input
+              type="password"
+              value={passphraseDraft}
+              onChange={(e) => setPassphraseDraft(e.target.value)}
+              placeholder="נדרשת כדי לפתוח את הפרטים בהמשך"
+              className="text-field text-field--full"
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+            <Button onClick={saveCredentials} disabled={savingCredentials}>
+              {savingCredentials ? 'שומר...' : 'שמור'}
+            </Button>
+            {credentialsStored && (
+              <Button variant="danger-ghost" onClick={clearCredentials}>מחק פרטים שמורים</Button>
+            )}
+            {credentialsMsg && (
+              <div style={{ fontSize: '0.82rem', color: credentialsMsg.error ? 'var(--danger)' : 'var(--good)' }}>
+                {credentialsMsg.msg}
+              </div>
             )}
           </div>
         </div>

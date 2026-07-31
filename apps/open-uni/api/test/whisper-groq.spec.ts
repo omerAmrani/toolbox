@@ -27,8 +27,8 @@ describe('whisper-groq transcribe', () => {
   it('fails fast with a clear message on an expired/invalid API key (401), without retrying', async () => {
     mockCreate.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
 
-    await expect(transcribe(audioPath)).rejects.toThrow(
-      'Groq API key invalid or expired — check GROQ_API_KEY in .env',
+    await expect(transcribe(audioPath, 'test-key')).rejects.toThrow(
+      'Groq API key invalid or expired',
     );
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });

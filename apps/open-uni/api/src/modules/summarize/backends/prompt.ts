@@ -16,7 +16,3 @@ Skip filler, repetition, and admin announcements.
 Transcript:
 ${transcript}`;
 }
-
-export function summarizeChunk(chunkText: string): Promise<string> {
-  return Promise.resolve(chunkText);
-}

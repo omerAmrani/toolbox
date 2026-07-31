@@ -27,49 +27,34 @@ export class EmailService {
     });
   }
 
-  async sendDetectionNotification(to: string | null, found: { className: string; lectureName: string; lectureDate?: string }[]): Promise<void> {
-    if (!this.isConfigured(to)) return;
-
-    const rows = found.map(l => {
-      const date = this.formatDate(l.lectureDate) || '—';
-      return `<tr><td style="padding:6px 12px">${l.className}</td><td style="padding:6px 12px">${l.lectureName}</td><td style="padding:6px 12px">${date}</td></tr>`;
-    }).join('');
+  async sendMagicLink(to: string, verifyUrl: string): Promise<void> {
+    if (!this.isConfigured(to)) throw new Error('Email is not configured — set GMAIL_USER / GMAIL_APP_PASSWORD');
 
     const html = `<!DOCTYPE html>
 <html dir="rtl" lang="he">
 <head><meta charset="UTF-8">
 <style>
-  body { font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #1a1a1a; max-width: 700px; margin: 0 auto; padding: 24px; direction: rtl; }
-  h2 { color: #2c2c2c; margin-bottom: 16px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { background: #f4f4f4; padding: 8px 12px; text-align: right; font-weight: 600; }
-  td { border-top: 1px solid #e0e0e0; }
+  body { font-family: Arial, sans-serif; font-size: 15px; line-height: 1.7; color: #1a1a1a; max-width: 500px; margin: 0 auto; padding: 24px; direction: rtl; }
+  a.btn { display: inline-block; margin-top: 16px; padding: 10px 20px; background: #2c2c2c; color: #fff; text-decoration: none; border-radius: 6px; }
   .footer { margin-top: 24px; font-size: 0.85em; color: #888; }
 </style>
 </head>
 <body dir="rtl">
-  <h2>נמצאו ${found.length} הרצאות חדשות</h2>
-  <table>
-    <thead><tr><th>קורס</th><th>הרצאה</th><th>תאריך</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <p class="footer">פתח את ההגדרות כדי לאשר או לדלג על הרצאות.</p>
+  <p>לחצו על הכפתור כדי להתחבר:</p>
+  <a class="btn" href="${verifyUrl}">התחברות</a>
+  <p class="footer">הקישור תקף ל-15 דקות. אם לא ביקשתם התחברות, אפשר להתעלם מהמייל.</p>
 </body>
 </html>`;
-
-    const text = `נמצאו ${found.length} הרצאות חדשות:\n` +
-      found.map(l => `• ${l.className} — ${l.lectureName} (${this.formatDate(l.lectureDate) || '—'})`).join('\n') +
-      '\n\nפתח את ההגדרות כדי לאשר או לדלג.';
 
     await this.createTransporter().sendMail({
       from: GMAIL_USER,
       to,
-      subject: `[פייפליין] נמצאו ${found.length} הרצאות חדשות`,
+      subject: 'קישור התחברות',
       html,
-      text,
+      text: `לחצו על הקישור כדי להתחבר: ${verifyUrl}\n\nהקישור תקף ל-15 דקות.`,
     });
 
-    console.log(`[email] sent detection notification — ${found.length} lectures`);
+    console.log(`[email] sent magic link to ${to}`);
   }
 
   async sendLectureSummary({ to, className, lectureName, lectureDate, summaryContent }: { to: string | null; className: string; lectureName: string; lectureDate?: string; summaryContent: string }): Promise<void> {

@@ -4,13 +4,10 @@ import * as dotenv from 'dotenv';
 
 dotenv.config({ path: process.env.NODE_ENV === 'test' ? '.env.test' : '.env' });
 
+// OPAL/AI credentials are no longer read from here — they're per-user,
+// client-side encrypted, and sent per-request (see src/credentials.ts).
+
 export const {
-  OPENU_USERNAME,
-  OPENU_PASSWORD,
-  OPENU_ID,
-  GROQ_API_KEY,
-  GEMINI_API_KEY,
-  ANTHROPIC_API_KEY,
   WHISPER_PROMPT = 'הרצאה אקדמית. עשוי להכיל מונחים טכניים באנגלית.',
   WHISPER_CONCURRENCY = '2',
   SUMMARIZE_BACKEND = 'gemini',
@@ -20,7 +17,13 @@ export const {
   GMAIL_APP_PASSWORD,
   PORT = '3001',
   WEB_ORIGIN = 'http://127.0.0.1:3002',
+  API_ORIGIN = `http://127.0.0.1:${process.env.PORT || '3001'}`,
+  JWT_SECRET,
 } = process.env;
+
+if (!JWT_SECRET && process.env.NODE_ENV !== 'test') {
+  throw new Error('JWT_SECRET is required — set it in .env (e.g. `openssl rand -hex 32`)');
+}
 
 export const MERGE_MAX_TOKENS = 16384;
 

@@ -9,6 +9,10 @@ import { SummarizeService } from '../src/modules/summarize/summarize.service';
 import { EmailService } from '../src/modules/email/email.service';
 import { StorageService } from '../src/modules/storage/storage.service';
 import { truncateAll, cleanClassesDir } from './helpers/db';
+import { authCookie } from './helpers/auth';
+
+const USER = 'test-user';
+const OPAL_CREDS = { opalUsername: 'u', opalPassword: 'p', opalId: '1' };
 
 const mockDetect = {
   detectNewLectures: jest.fn().mockResolvedValue([]),
@@ -28,7 +32,6 @@ const mockSummarize = {
 
 const mockEmail = {
   sendLectureSummary: jest.fn().mockResolvedValue(undefined),
-  sendDetectionNotification: jest.fn().mockResolvedValue(undefined),
 };
 
 function parseSSE(raw: string): any[] {
@@ -67,33 +70,41 @@ describe('PipelineController', () => {
     jest.clearAllMocks();
   });
 
-  describe('GET /api/classes/queue', () => {
-    it('returns queue status with running=false and empty lectures when no data', async () => {
+  const get = (path: string) => request(app.getHttpServer()).get(path).set('Cookie', authCookie(USER));
+  const post = (path: string) => request(app.getHttpServer()).post(path).set('Cookie', authCookie(USER));
+
+  describe('auth', () => {
+    it('returns 401 when not logged in', async () => {
       const res = await request(app.getHttpServer()).get('/api/classes/queue');
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('GET /api/classes/queue', () => {
+    it('returns empty lectures when no data', async () => {
+      const res = await get('/api/classes/queue');
       expect(res.status).toBe(200);
-      expect(res.body.running).toBe(false);
       expect(res.body.lectures).toEqual([]);
     });
 
     it('includes all lectures across all classes', async () => {
-      const cls = storage.createClass({ name: 'Math', semester: 'A', year: 2025 });
+      const cls = storage.createClass({ name: 'Math', semester: 'A', year: 2025 }, USER);
       storage.createLecture(cls.id, { name: 'L1', url: 'https://example.com', status: 'pending' });
       storage.createLecture(cls.id, { name: 'L2', url: 'https://example.com', status: 'transcribed' });
 
-      const res = await request(app.getHttpServer()).get('/api/classes/queue');
+      const res = await get('/api/classes/queue');
       expect(res.status).toBe(200);
       expect(res.body.lectures).toHaveLength(2);
       expect(res.body.lectures[0]).toMatchObject({ className: 'Math', status: 'pending' });
     });
 
     it('only includes lectures from classes matching the given semester and year', async () => {
-      const clsA = storage.createClass({ name: 'Semester A Class', semester: 'A', year: 2025 });
+      const clsA = storage.createClass({ name: 'Semester A Class', semester: 'A', year: 2025 }, USER);
       storage.createLecture(clsA.id, { name: 'L1', url: 'https://example.com', status: 'pending' });
-      const clsB = storage.createClass({ name: 'Semester B Class', semester: 'B', year: 2025 });
+      const clsB = storage.createClass({ name: 'Semester B Class', semester: 'B', year: 2025 }, USER);
       storage.createLecture(clsB.id, { name: 'L2', url: 'https://example.com', status: 'pending' });
 
-      const res = await request(app.getHttpServer())
-        .get('/api/classes/queue')
+      const res = await get('/api/classes/queue')
         .query({ semester: 'A', year: 2025 });
 
       expect(res.status).toBe(200);
@@ -102,36 +113,12 @@ describe('PipelineController', () => {
     });
   });
 
-  describe('POST /api/classes/run-queue', () => {
-    it('returns ok when queue is not already running', async () => {
-      const res = await request(app.getHttpServer()).post('/api/classes/run-queue');
-      expect(res.status).toBe(201);
-      expect(res.body.ok).toBe(true);
-    });
-  });
-
-  describe('POST /api/classes/run-pipeline', () => {
-    it('returns ok when pipeline is not running', async () => {
-      const res = await request(app.getHttpServer()).post('/api/classes/run-pipeline');
-      expect(res.status).toBe(201);
-      expect(res.body.ok).toBe(true);
-    });
-  });
-
-  describe('GET /api/classes/cron-log', () => {
-    it('returns null when no cron has run', async () => {
-      const res = await request(app.getHttpServer()).get('/api/classes/cron-log');
-      expect(res.status).toBe(200);
-      expect(res.body).toBeNull();
-    });
-  });
-
   describe('POST /api/classes/sync (SSE)', () => {
     it('sends done event immediately when no classes have opalCourseUrl', async () => {
-      storage.createClass({ name: 'No URL Class', semester: 'A', year: 2025 });
+      storage.createClass({ name: 'No URL Class', semester: 'A', year: 2025 }, USER);
 
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/sync')
+      const res = await post('/api/classes/sync')
+        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -146,11 +133,11 @@ describe('PipelineController', () => {
     });
 
     it('calls detectNewLectures for classes with opalCourseUrl and emits class events', async () => {
-      const cls = storage.createClass({ name: 'OPAL Class', semester: 'A', year: 2025 });
+      const cls = storage.createClass({ name: 'OPAL Class', semester: 'A', year: 2025 }, USER);
       storage.updateClassMeta(cls.id, { opalCourseUrl: 'https://opal.example.com/course/1' });
 
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/sync')
+      const res = await post('/api/classes/sync')
+        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -162,18 +149,18 @@ describe('PipelineController', () => {
       const classEvent = events.find((e: any) => e.type === 'class');
       const done = events.find((e: any) => e.type === 'done');
 
-      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(cls.id, expect.any(Function));
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(cls.id, { username: 'u', password: 'p', id: '1' }, expect.any(Function));
       expect(classEvent).toMatchObject({ type: 'class', classId: cls.id, newLectures: [] });
       expect(done).toBeDefined();
     });
 
     it('emits class event with error when detectNewLectures throws', async () => {
-      const cls = storage.createClass({ name: 'Error Class', semester: 'A', year: 2025 });
+      const cls = storage.createClass({ name: 'Error Class', semester: 'A', year: 2025 }, USER);
       storage.updateClassMeta(cls.id, { opalCourseUrl: 'https://opal.example.com/course/2' });
       mockDetect.detectNewLectures.mockRejectedValueOnce(new Error('Network error'));
 
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/sync')
+      const res = await post('/api/classes/sync')
+        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -188,14 +175,14 @@ describe('PipelineController', () => {
     });
 
     it('creates detected lectures immediately as pending and returns the created records', async () => {
-      const cls = storage.createClass({ name: 'OPAL Class', semester: 'A', year: 2025 });
+      const cls = storage.createClass({ name: 'OPAL Class', semester: 'A', year: 2025 }, USER);
       storage.updateClassMeta(cls.id, { opalCourseUrl: 'https://opal.example.com/course/3' });
       mockDetect.detectNewLectures.mockResolvedValueOnce([
         { name: 'New Lecture', url: 'https://example.com/new', lectureDate: '2025-01-01' },
       ]);
 
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/sync')
+      const res = await post('/api/classes/sync')
+        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -214,14 +201,13 @@ describe('PipelineController', () => {
     });
 
     it('only checks classes matching the given semester and year', async () => {
-      const clsA = storage.createClass({ name: 'Semester A Class', semester: 'A', year: 2025 });
+      const clsA = storage.createClass({ name: 'Semester A Class', semester: 'A', year: 2025 }, USER);
       storage.updateClassMeta(clsA.id, { opalCourseUrl: 'https://opal.example.com/course/a' });
-      const clsB = storage.createClass({ name: 'Semester B Class', semester: 'B', year: 2025 });
+      const clsB = storage.createClass({ name: 'Semester B Class', semester: 'B', year: 2025 }, USER);
       storage.updateClassMeta(clsB.id, { opalCourseUrl: 'https://opal.example.com/course/b' });
 
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/sync')
-        .send({ semester: 'A', year: 2025 })
+      const res = await post('/api/classes/sync')
+        .send({ ...OPAL_CREDS, semester: 'A', year: 2025 })
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -233,7 +219,7 @@ describe('PipelineController', () => {
       const classEvents = events.filter((e: any) => e.type === 'class');
 
       expect(mockDetect.detectNewLectures).toHaveBeenCalledTimes(1);
-      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(clsA.id, expect.any(Function));
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(clsA.id, { username: 'u', password: 'p', id: '1' }, expect.any(Function));
       expect(classEvents).toHaveLength(1);
       expect(classEvents[0]).toMatchObject({ classId: clsA.id });
     });
@@ -241,36 +227,32 @@ describe('PipelineController', () => {
 
   describe('POST /api/classes/test-email', () => {
     it('returns 400 when classId or lectureId is missing', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/test-email')
+      const res = await post('/api/classes/test-email')
         .send({ classId: 'only-class' });
       expect(res.status).toBe(400);
     });
 
     it('returns 404 when class or lecture does not exist', async () => {
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/test-email')
+      const res = await post('/api/classes/test-email')
         .send({ classId: 'bad-class', lectureId: 'bad-lecture' });
       expect(res.status).toBe(404);
     });
 
     it('returns 400 when lecture has no summary', async () => {
-      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
+      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 }, USER);
       const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
 
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/test-email')
+      const res = await post('/api/classes/test-email')
         .send({ classId: cls.id, lectureId: lec.id });
       expect(res.status).toBe(400);
     });
 
     it('sends email and returns ok when lecture has a summary', async () => {
-      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 });
+      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 }, USER);
       const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
       storage.saveSummaryVersion(cls.id, lec.id, 'My summary content', 'gemini');
 
-      const res = await request(app.getHttpServer())
-        .post('/api/classes/test-email')
+      const res = await post('/api/classes/test-email')
         .send({ classId: cls.id, lectureId: lec.id });
       expect(res.status).toBe(201);
       expect(res.body.ok).toBe(true);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { apiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { classIcon } from '@/lib/classMeta';
 
@@ -38,7 +38,7 @@ export default function StatsPage() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(apiUrl('/api/classes'))
+    apiFetch('/api/classes')
       .then((r) => r.json())
       .then((data: ClassRow[]) => {
         if (cancelled) return;
@@ -47,8 +47,8 @@ export default function StatsPage() {
         Promise.all(
           list.map(async (c) => {
             try {
-              const lecs: LectureRow[] = await fetch(
-                apiUrl(`/api/classes/${c.id}/lectures`),
+              const lecs: LectureRow[] = await apiFetch(
+                `/api/classes/${c.id}/lectures`,
               ).then((r) => r.json());
               return [c.id, Array.isArray(lecs) ? lecs : []] as const;
             } catch {

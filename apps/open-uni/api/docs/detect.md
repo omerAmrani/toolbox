@@ -6,10 +6,10 @@ Detects new lectures on an OPAL course page using Playwright. Used by the pipeli
 
 - Module: `DetectModule`
 - Service: `DetectService`
-- Called by `PipelineService.runFullPipeline()` and `PipelineController POST /api/classes/sync`
+- Called by `PipelineController POST /api/classes/sync` and `ClassesController POST /:classId/detect`
 
 **Flow:**
-1. Launches Playwright browser, logs in to OPAL with `OPENU_USERNAME` / `OPENU_PASSWORD` / `OPENU_ID`
+1. Launches Playwright browser, logs in to OPAL with credentials supplied per-request in the request body (no server-side env fallback)
 2. Navigates to the class's `opalCourseUrl`
 3. Scrapes lecture list; compares against existing lectures in storage
 4. Returns only lectures not already in the DB

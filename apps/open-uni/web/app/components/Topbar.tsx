@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { apiUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 
 interface Crumb {
   label: string;
@@ -56,7 +56,7 @@ export default function Topbar({ crumbs }: TopbarProps) {
       return;
     }
     let cancelled = false;
-    fetch(apiUrl('/api/classes'))
+    apiFetch('/api/classes')
       .then((r) => r.json())
       .then((data: { id: string; name: string }[]) => {
         if (cancelled) return;
@@ -74,7 +74,7 @@ export default function Topbar({ crumbs }: TopbarProps) {
       return;
     }
     let cancelled = false;
-    fetch(apiUrl(`/api/classes/${classId}/lectures/${lectureId}/status`))
+    apiFetch(`/api/classes/${classId}/lectures/${lectureId}/status`)
       .then((r) => r.json())
       .then((data: { name?: string }) => {
         if (!cancelled) setLectureName(data?.name ?? null);

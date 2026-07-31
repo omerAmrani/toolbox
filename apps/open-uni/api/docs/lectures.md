@@ -1,11 +1,13 @@
 # Lectures
 
-Lecture lifecycle management: CRUD, status machine, transcription and summarization SSE endpoints, Q&A.
+Lecture lifecycle management: CRUD, status machine, transcription and summarization SSE endpoints.
 
 ## API
 
 - Module: `LecturesModule`
 - Controller: `LecturesController` (`api/classes/:classId/lectures`)
+
+**Ownership:** every route requires a valid `auth_token` session cookie (401 if missing/invalid) and 404s if the logged-in user doesn't own the parent class — see `docs/classes.md`. Checked once per request (`requireOwnedClass`) before any lecture lookup.
 
 **CRUD routes:**
 - `GET /api/classes/:classId/lectures` — list lectures for a class
@@ -23,12 +25,14 @@ There is no `skipped` status — every lecture created (manually or via sync/cro
 
 **Transcribe (SSE):** `POST .../transcribe`
 - login to OPAL → extract video URL → download + ffmpeg → whisper → save `transcript.txt`
+- Body: `{ opalUsername, opalPassword, opalId, groqApiKey }` required (400 if missing) — no server-side credential fallback, the client supplies its own per-request (see `docs/classes.md`'s OPAL credentials note)
 - Body: `{ test: true }` caps download at 30 min
 - A second client connecting to an in-progress job attaches to the existing bus (no duplicate job)
+- Per-user concurrency cap: a user can only have one active transcribe/detect/sync job at a time (across all classes/lectures) — a second one returns `429` (`src/job-guard.ts`). This is separate from the "attach to existing bus" case above, which is a reconnect to the *same* job, not a second one.
 
 **Summarize (SSE):** `POST .../summarize`
 - reads `transcript.txt` → summarizes via backend → saves versioned summary → sets as current
-- Body: `{ backend: 'gemini' | 'claude' }` overrides config default
+- Body: `{ backend: 'gemini' | 'claude' }` overrides config default; `{ geminiApiKey }` or `{ anthropicApiKey }` required to match whichever backend is used (400 if missing)
 
 **SSE event shapes:**
 - `{ type: 'progress', step, message }`

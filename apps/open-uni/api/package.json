@@ -13,11 +13,22 @@
     "test:coverage": "NODE_ENV=test jest --runInBand --coverage"
   },
   "jest": {
-    "moduleFileExtensions": ["js", "json", "ts"],
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
     "rootDir": ".",
-    "testMatch": ["<rootDir>/test/**/*.spec.ts"],
+    "testMatch": [
+      "<rootDir>/test/**/*.spec.ts"
+    ],
     "transform": {
-      "^.+\\.ts$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.spec.json" }]
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": "<rootDir>/tsconfig.spec.json"
+        }
+      ]
     },
     "testEnvironment": "node",
     "verbose": true,
@@ -30,10 +41,9 @@
     "@google/generative-ai": "^0.21.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
+    "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^10.0.0",
-    "@nestjs/schedule": "^4.0.0",
     "better-sqlite3": "^12.10.0",
-    "cron": "^3.2.1",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "groq-sdk": "^1.1.2",

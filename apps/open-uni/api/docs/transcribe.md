@@ -8,7 +8,7 @@ Downloads a lecture video from OPAL and transcribes it to text using Whisper.
 - Entry point: `LecturesController POST .../transcribe` (SSE) — see [lectures.md](lectures.md) for SSE details
 
 **Flow:**
-1. `DetectService.extractVideoUrl()` — Playwright login to OPAL, extracts direct video URL
+1. `DownloadService.extractVideoUrl()` — Playwright login to OPAL, extracts direct video URL
 2. `DownloadService.downloadAndTranscribe()` — downloads video, converts to `audio.mp3` via ffmpeg, runs Whisper
 3. Saves result to `transcript.txt` in the lecture data directory
 4. Sets lecture status: `transcribing` → `transcribed`
