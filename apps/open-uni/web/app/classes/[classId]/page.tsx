@@ -184,17 +184,6 @@ export default function ClassDetailPage() {
     }
   };
 
-  const deleteLecture = async (lectureId: string) => {
-    const ok = await deleteResource(`/api/classes/${classId}/lectures/${lectureId}`, 'למחוק את ההרצאה?');
-    if (ok === null) return;
-    if (ok) {
-      showToast('נמחק');
-      loadLectures();
-    } else {
-      showToast('שגיאה', true);
-    }
-  };
-
   if (notFound) {
     return <div className="page">קורס לא נמצא</div>;
   }
@@ -291,7 +280,6 @@ export default function ClassDetailPage() {
                   <div className="lec-card__actions" onClick={(e) => e.stopPropagation()}>
                     {l.status === 'pending' && (
                       <Button
-                        variant="primary"
                         data-testid="run-pipeline-btn"
                         onClick={() => runPipeline(l.id)}
                         title="הפעל pipeline"
@@ -300,19 +288,10 @@ export default function ClassDetailPage() {
                       </Button>
                     )}
                     {l.status === 'transcribed' && (
-                      <Button variant="primary" onClick={() => runSummarize(l.id)} title="סכם">
+                      <Button onClick={() => runSummarize(l.id)} title="סכם">
                         ▶ סכם
                       </Button>
                     )}
-                    <Button
-                      variant="danger-ghost"
-                      icon
-                      data-testid="delete-lecture-btn"
-                      onClick={() => deleteLecture(l.id)}
-                      title="מחק"
-                    >
-                      🗑
-                    </Button>
                   </div>
                   {showProgress && (
                     <div className="lec-card__progress">

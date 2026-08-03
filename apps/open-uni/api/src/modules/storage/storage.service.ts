@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   createClass, getClasses, getClass, getClassForUser, updateClassMeta, deleteClass,
-  createLecture, getLectures, getLecture, updateLectureMeta, deleteLecture,
+  createLecture, getLectures, getLecture, updateLectureMeta,
   lectureDirPath,
   saveSummaryVersion, getSummaryVersions, getSummaryContent,
   getCurrentSummaryContent, deleteSummaryVersion,
@@ -26,7 +26,6 @@ export class StorageService {
   readonly getLectures = getLectures;
   readonly getLecture = getLecture;
   readonly updateLectureMeta = updateLectureMeta;
-  readonly deleteLecture = deleteLecture;
   readonly lectureDirPath = lectureDirPath;
   readonly saveSummaryVersion = saveSummaryVersion;
   readonly getSummaryVersions = getSummaryVersions;

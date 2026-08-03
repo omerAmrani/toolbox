@@ -72,13 +72,6 @@ export class LecturesController {
     res.status(201).json(this.storage.createLecture(classId, { name, url, lectureDate, status: 'pending' }));
   }
 
-  @Delete(':classId/lectures/:lectureId')
-  deleteLecture(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Res() res: Response) {
-    if (!this.requireOwnedClass(classId, userId, res)) return;
-    if (!this.storage.deleteLecture(classId, lectureId)) return res.status(404).json({ error: 'Not found' });
-    res.json({ ok: true });
-  }
-
   @Patch(':classId/lectures/:lectureId')
   updateLecture(@CurrentUser() userId: string, @Param('classId') classId: string, @Param('lectureId') lectureId: string, @Body() body: any, @Res() res: Response) {
     if (!this.requireOwnedClass(classId, userId, res)) return;
@@ -118,6 +111,7 @@ export class LecturesController {
     const { opalUsername, opalPassword, opalId, groqApiKey } = body || {};
     if (!opalUsername || !opalPassword || !opalId) return res.status(400).json({ error: 'OPAL credentials required' });
     if (!groqApiKey) return res.status(400).json({ error: 'groqApiKey required' });
+    // never persisted server-side — in-memory for this request only, see credentials.ts
     const opalCredentials: OpalCredentials = { username: opalUsername, password: opalPassword, id: opalId };
 
     const key = `${classId}/${lectureId}`;

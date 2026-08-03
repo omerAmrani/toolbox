@@ -148,25 +148,6 @@ describe('LecturesController', () => {
     });
   });
 
-  describe('DELETE /api/classes/:classId/lectures/:lectureId', () => {
-    it('returns 404 for unknown lecture', async () => {
-      const res = await del(`/api/classes/${classId}/lectures/nonexistent`);
-      expect(res.status).toBe(404);
-    });
-
-    it('deletes lecture and returns ok', async () => {
-      const created = await post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'Delete Me', url: 'https://example.com' });
-
-      const delRes = await del(`/api/classes/${classId}/lectures/${created.body.id}`);
-      expect(delRes.status).toBe(200);
-      expect(delRes.body.ok).toBe(true);
-
-      const list = await get(`/api/classes/${classId}/lectures`);
-      expect(list.body).toHaveLength(0);
-    });
-  });
-
   describe('PATCH /api/classes/:classId/lectures/:lectureId', () => {
     it('updates lecture name and lectureDate', async () => {
       const created = await post(`/api/classes/${classId}/lectures`)

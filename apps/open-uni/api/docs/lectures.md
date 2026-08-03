@@ -13,8 +13,9 @@ Lecture lifecycle management: CRUD, status machine, transcription and summarizat
 - `GET /api/classes/:classId/lectures` — list lectures for a class
 - `POST /api/classes/:classId/lectures` — create lecture (`name`, `url` required; `lectureDate` optional). Always starts at `pending`.
 - `PATCH /api/classes/:classId/lectures/:lectureId` — update `name` / `lectureDate`
-- `DELETE /api/classes/:classId/lectures/:lectureId` — delete lecture and all associated files
 - `GET /api/classes/:classId/lectures/:lectureId/status` — full lecture record
+
+Lectures cannot be deleted individually — all lectures synced/detected for a class remain visible; only deleting the parent class removes them (see `docs/classes.md`).
 
 **Status machine:**
 `pending` → `transcribing` → `transcribed` → `summarizing` → `summarized`

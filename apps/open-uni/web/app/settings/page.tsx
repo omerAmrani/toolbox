@@ -435,7 +435,7 @@ export default function SettingsPage() {
             <div style={{ marginBottom: 8 }}>
               <div style={{ fontSize: '0.85rem', wordBreak: 'break-all', marginBottom: 8 }}>נתיב נבחר: {pendingDataDir}</div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <Button variant="primary" onClick={saveDataDir} disabled={savingDir}>{savingDir ? 'שומר...' : 'שמור והפעל מחדש'}</Button>
+                <Button onClick={saveDataDir} disabled={savingDir}>{savingDir ? 'שומר...' : 'שמור והפעל מחדש'}</Button>
                 <Button onClick={() => setPendingDataDir(null)}>ביטול</Button>
               </div>
             </div>

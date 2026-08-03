@@ -290,16 +290,6 @@ export default function LecturePage() {
     }
   };
 
-  const deleteLecture = async () => {
-    const ok = await deleteResource(
-      `/api/classes/${classId}/lectures/${lectureId}`,
-      'למחוק את ההרצאה וכל הקבצים שלה?',
-    );
-    if (ok === null) return;
-    if (ok) router.push(`/classes/${classId}`);
-    else showToast('שגיאה במחיקה', true);
-  };
-
   const copyActive = async () => {
     if (activeView === 'transcript') {
       if (!transcript) return;
@@ -473,7 +463,7 @@ export default function LecturePage() {
             ) : (
               <div className="summary" style={{ textAlign: 'center', padding: '40px 0' }}>
                 <p style={{ color: 'var(--muted)', marginBottom: 16 }}>אין סיכום עדיין</p>
-                <Button variant="primary" size="md" data-testid="summarize-btn" onClick={runSummarize}>
+                <Button size="md" data-testid="summarize-btn" onClick={runSummarize}>
                   ▶ סכם עכשיו
                 </Button>
               </div>
@@ -518,7 +508,7 @@ export default function LecturePage() {
                 מודל AI
               </label>
               <BackendSelect value={backend} onChange={setBackend} full />
-              <Button variant="primary" block onClick={runSummarize} disabled={jobActive}>
+              <Button block onClick={runSummarize} disabled={jobActive}>
                 {actionLabel}
               </Button>
               <Button block onClick={runRetranscribe} disabled={jobActive}>
@@ -529,9 +519,6 @@ export default function LecturePage() {
                   ⏹ עצור
                 </Button>
               )}
-              <Button variant="danger-ghost" block onClick={deleteLecture}>
-                🗑 מחק הרצאה
-              </Button>
             </div>
           </div>
         </aside>

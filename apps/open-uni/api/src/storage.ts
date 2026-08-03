@@ -158,15 +158,6 @@ export function updateLectureMeta(classId: string, lectureId: string, updates: R
   return updated;
 }
 
-export function deleteLecture(classId: string, lectureId: string): boolean {
-  if (!getLecture(classId, lectureId)) return false;
-  db.prepare('DELETE FROM summaries WHERE lectureId = ?').run(lectureId);
-  db.prepare('DELETE FROM lectures WHERE id = ?').run(lectureId);
-  const dir = path.join(CLASSES_DIR, classId, 'lectures', lectureId);
-  if (existsSync(dir)) rmSync(dir, { recursive: true });
-  return true;
-}
-
 export function lectureDirPath(classId: string, lectureId: string): string {
   return path.join(CLASSES_DIR, classId, 'lectures', lectureId);
 }
