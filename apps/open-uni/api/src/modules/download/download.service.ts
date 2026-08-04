@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { existsSync, rmSync, statSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
 import { chromium } from 'playwright';
@@ -126,8 +126,12 @@ export class DownloadService {
 
   // ── Download + Transcribe (ffmpeg + whisper) ──────────────────────────────────
 
-  private segPath(i: number): string {
-    return path.join(TMP_DIR, `chunk_${String(i).padStart(3, '0')}.wav`);
+  private jobDir(jobId: string): string {
+    return path.join(TMP_DIR, jobId);
+  }
+
+  private segPath(i: number, jobId: string): string {
+    return path.join(this.jobDir(jobId), `chunk_${String(i).padStart(3, '0')}.wav`);
   }
 
   private secsToHMS(s: number): string {
@@ -170,7 +174,7 @@ export class DownloadService {
     return result;
   }
 
-  private runTranscribeQueue(groqApiKey: string, onProgress: (msg: string) => void) {
+  private runTranscribeQueue(jobId: string, groqApiKey: string, onProgress: (msg: string) => void) {
     const results: { idx: number; text: string; chunkText: string }[] = [];
     const pending: { idx: number; p: string; resolve: (v: { chunkText: string }) => void }[] = [];
     let active = 0;
@@ -204,7 +208,7 @@ export class DownloadService {
       enqueue: (idx: number): Promise<{ chunkText: string }> => {
         totalSeen = Math.max(totalSeen, idx + 1);
         return new Promise((resolve) => {
-          pending.push({ idx, p: this.segPath(idx), resolve });
+          pending.push({ idx, p: this.segPath(idx, jobId), resolve });
           drain();
         });
       },
@@ -223,6 +227,7 @@ export class DownloadService {
   }
 
   async downloadAndTranscribe(
+    jobId: string,
     videoUrl: string,
     groqApiKey: string,
     onProgress = (_: string) => {},
@@ -232,7 +237,8 @@ export class DownloadService {
     signal: AbortSignal | null = null,
   ): Promise<string> {
     if (signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
-    for (let i = 0; existsSync(this.segPath(i)); i++) rmSync(this.segPath(i));
+    rmSync(this.jobDir(jobId), { recursive: true, force: true });
+    mkdirSync(this.jobDir(jobId), { recursive: true });
 
     const args = ['-y'];
     if (maxDurationSecs) args.push('-t', String(maxDurationSecs));
@@ -246,7 +252,7 @@ export class DownloadService {
       '-vn', '-ac', '1', '-ar', '16000', '-acodec', 'pcm_s16le',
       '-f', 'segment', '-segment_time', String(CHUNK_SECS),
       '-reset_timestamps', '1',
-      path.join(TMP_DIR, 'chunk_%03d.wav'),
+      path.join(this.jobDir(jobId), 'chunk_%03d.wav'),
     );
 
     const proc = spawn('ffmpeg', args);
@@ -262,7 +268,7 @@ export class DownloadService {
     let totalSecs = 0;
     let nextToDetect = 0;
     let stalledByWatchdog = false;
-    const queue = this.runTranscribeQueue(groqApiKey, onProgress);
+    const queue = this.runTranscribeQueue(jobId, groqApiKey, onProgress);
     const chunkJobs: Promise<any>[] = [];
     let stallTimer = setTimeout(() => {
       console.error('\n[ffmpeg] no progress for 3 minutes — killing, saving partial transcript');
@@ -293,7 +299,7 @@ export class DownloadService {
 
     const pollTimer = setInterval(() => {
       let found = false;
-      while (existsSync(this.segPath(nextToDetect + 1))) {
+      while (existsSync(this.segPath(nextToDetect + 1, jobId))) {
         found = true;
         const idx = nextToDetect++;
         console.log(`\n  [poll] segment ${idx + 1} sealed`);
@@ -309,43 +315,47 @@ export class DownloadService {
       }
     }, 2000);
 
-    await new Promise<void>((resolve, reject) => {
-      proc.on('close', (code: number | null) => {
-        clearTimeout(stallTimer);
-        process.stdout.write('\n');
-        if (code === 0 || stalledByWatchdog || abortedBySignal) resolve();
-        else reject(new Error(`ffmpeg exited with code ${code}`));
+    try {
+      await new Promise<void>((resolve, reject) => {
+        proc.on('close', (code: number | null) => {
+          clearTimeout(stallTimer);
+          process.stdout.write('\n');
+          if (code === 0 || stalledByWatchdog || abortedBySignal) resolve();
+          else reject(new Error(`ffmpeg exited with code ${code}`));
+        });
+        proc.on('error', (err: Error) => { clearTimeout(stallTimer); reject(err); });
       });
-      proc.on('error', (err: Error) => { clearTimeout(stallTimer); reject(err); });
-    });
 
-    clearInterval(pollTimer);
+      clearInterval(pollTimer);
 
-    if (abortedBySignal) {
-      for (let i = 0; existsSync(this.segPath(i)); i++) rmSync(this.segPath(i));
-      throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+      if (abortedBySignal) throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+      console.log(`[downloadAndTranscribe] ffmpeg done. nextToDetect=${nextToDetect}`);
+
+      while (existsSync(this.segPath(nextToDetect, jobId))) {
+        const idx = nextToDetect++;
+        console.log(`  [drain] segment ${idx + 1} sealed`);
+        const job = queue.enqueue(idx).then(({ chunkText }) => {
+          if (onChunkReady && chunkText) onChunkReady(idx, chunkText);
+        });
+        chunkJobs.push(job);
+      }
+
+      if (nextToDetect === 0) throw new Error('No audio segments produced by ffmpeg');
+
+      const transcript = await queue.waitAll();
+      rmSync(this.jobDir(jobId), { recursive: true, force: true });
+      if (stalledByWatchdog) {
+        const warn = `\n⚠️ [תמלול חלקי — ffmpeg תקוע לאחר ${nextToDetect} קטעים]\n`;
+        onProgress(`⚠️ תמלול חלקי — נשמרו ${nextToDetect} קטעים`);
+        console.warn(warn);
+        return transcript + warn;
+      }
+      console.log(`✅  Transcribed ${transcript.split(' ').length} words from ${nextToDetect} segment(s)`);
+      return transcript;
+    } catch (err) {
+      clearInterval(pollTimer);
+      rmSync(this.jobDir(jobId), { recursive: true, force: true });
+      throw err;
     }
-    console.log(`[downloadAndTranscribe] ffmpeg done. nextToDetect=${nextToDetect}`);
-
-    while (existsSync(this.segPath(nextToDetect))) {
-      const idx = nextToDetect++;
-      console.log(`  [drain] segment ${idx + 1} sealed`);
-      const job = queue.enqueue(idx).then(({ chunkText }) => {
-        if (onChunkReady && chunkText) onChunkReady(idx, chunkText);
-      });
-      chunkJobs.push(job);
-    }
-
-    if (nextToDetect === 0) throw new Error('No audio segments produced by ffmpeg');
-
-    const transcript = await queue.waitAll();
-    if (stalledByWatchdog) {
-      const warn = `\n⚠️ [תמלול חלקי — ffmpeg תקוע לאחר ${nextToDetect} קטעים]\n`;
-      onProgress(`⚠️ תמלול חלקי — נשמרו ${nextToDetect} קטעים`);
-      console.warn(warn);
-      return transcript + warn;
-    }
-    console.log(`✅  Transcribed ${transcript.split(' ').length} words from ${nextToDetect} segment(s)`);
-    return transcript;
   }
 }

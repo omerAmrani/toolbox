@@ -19,10 +19,23 @@ export const {
   WEB_ORIGIN = 'http://127.0.0.1:3002',
   API_ORIGIN = `http://127.0.0.1:${process.env.PORT || '3001'}`,
   JWT_SECRET,
+  REDIS_HOST = '127.0.0.1',
+  REDIS_PORT = '6379',
+  REDIS_USERNAME,
+  REDIS_PASSWORD,
+  QUEUE_ENCRYPTION_KEY,
 } = process.env;
 
 if (!JWT_SECRET && process.env.NODE_ENV !== 'test') {
   throw new Error('JWT_SECRET is required — set it in .env (e.g. `openssl rand -hex 32`)');
+}
+
+// Encrypts credentials at rest in Redis while they sit in a queued job — see
+// queue.crypto.ts. Protects against a Redis-only compromise (leaked backup,
+// exposed instance); does not protect against the API/worker server itself
+// being compromised, since it holds this same key.
+if (!QUEUE_ENCRYPTION_KEY && process.env.NODE_ENV !== 'test') {
+  throw new Error('QUEUE_ENCRYPTION_KEY is required — set it in .env (e.g. `openssl rand -base64 32`)');
 }
 
 export const MERGE_MAX_TOKENS = 16384;

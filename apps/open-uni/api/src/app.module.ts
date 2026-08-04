@@ -7,12 +7,14 @@ import { StorageModule } from './modules/storage/storage.module';
 import { HealthModule } from './modules/health/health.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { QueueModule } from './modules/queue/queue.module';
 import { AppController } from './app.controller';
 
 @Module({
   imports: [
     StorageModule,
     AuthModule,
+    QueueModule,
     ClassesModule,
     LecturesModule,
     PipelineModule,

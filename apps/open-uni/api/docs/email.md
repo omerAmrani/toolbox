@@ -6,18 +6,18 @@ Sends Gmail notifications when new lectures are detected or when a summary is re
 
 - Module: `EmailModule`
 - Service: `EmailService`
-- Called automatically after each lecture completes processing in the queue, and manually via `POST /api/classes/test-email`
+- Called automatically when `POST :classId/lectures/:lectureId/summarize` finishes successfully, and manually via `POST /api/classes/test-email`
 
 **Triggers:**
-- Summary email — sent after each lecture completes processing in the queue
+- Summary email — sent right after a lecture's summarize job saves its result, gated by the `notifyEmailEnabled` toggle
 
-**Config:** `GMAIL_*` env vars (see `.env.local`). Recipient is configured in the same env.
+**Config:** `GMAIL_*` env vars (see `.env.local`) for SMTP credentials. Recipient address is `GET/PUT /api/classes/notify-email`. The on/off toggle is `GET/PUT /api/classes/notify-email-enabled` (`{ enabled: boolean }`, defaults to off).
 
-**Manual test:** `POST /api/classes/test-email` with `{ classId, lectureId }` — requires lecture to have a current summary.
+**Manual test:** `POST /api/classes/test-email` with `{ classId, lectureId }` — requires lecture to have a current summary. Ignores the toggle (always sends when called directly).
 
 ## Tests
 
-Dispatch is covered with `EmailService` mocked — assertions only, never hits SMTP. `sendLectureSummary` is asserted on queue completion. It's fire-and-forget, so a rejected promise must not fail the pipeline run. See [pipeline.md](pipeline.md#tests) and `open-uni-deployment.md` Phase 1.
+Dispatch is covered with `EmailService` mocked — assertions only, never hits SMTP. `sendLectureSummary` is asserted on summarize completion when the toggle is on. It's fire-and-forget, so a rejected promise must not fail the summarize job. See [lectures.md](lectures.md).
 
 ## Web
 

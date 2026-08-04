@@ -6,7 +6,7 @@ import {
   saveSummaryVersion, getSummaryVersions, getSummaryContent,
   getCurrentSummaryContent, deleteSummaryVersion,
   reloadFromDisk,
-  getNotifyEmail, setNotifyEmail,
+  getNotifyEmail, setNotifyEmail, getNotifyEmailEnabled, setNotifyEmailEnabled,
   getActiveSemester, setActiveSemester,
   getUserByEmail, createUser, getOrCreateUser,
   createMagicLinkToken, consumeMagicLinkToken,
@@ -35,6 +35,8 @@ export class StorageService {
   readonly reloadFromDisk = reloadFromDisk;
   readonly getNotifyEmail = getNotifyEmail;
   readonly setNotifyEmail = setNotifyEmail;
+  readonly getNotifyEmailEnabled = getNotifyEmailEnabled;
+  readonly setNotifyEmailEnabled = setNotifyEmailEnabled;
   readonly getActiveSemester = getActiveSemester;
   readonly setActiveSemester = setActiveSemester;
   readonly getUserByEmail = getUserByEmail;

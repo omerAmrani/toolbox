@@ -53,6 +53,34 @@ describe('JobsController', () => {
     });
   });
 
+  describe('GET /api/classes/notify-email-enabled', () => {
+    it('defaults to false', async () => {
+      const res = await request(app.getHttpServer()).get('/api/classes/notify-email-enabled');
+      expect(res.status).toBe(200);
+      expect(res.body.enabled).toBe(false);
+    });
+  });
+
+  describe('PUT /api/classes/notify-email-enabled', () => {
+    it('rejects a non-boolean value', async () => {
+      const res = await request(app.getHttpServer())
+        .put('/api/classes/notify-email-enabled')
+        .send({ enabled: 'yes' });
+      expect(res.status).toBe(400);
+    });
+
+    it('toggles the flag', async () => {
+      const res = await request(app.getHttpServer())
+        .put('/api/classes/notify-email-enabled')
+        .send({ enabled: true });
+      expect(res.status).toBe(200);
+      expect(res.body.enabled).toBe(true);
+
+      const getRes = await request(app.getHttpServer()).get('/api/classes/notify-email-enabled');
+      expect(getRes.body.enabled).toBe(true);
+    });
+  });
+
   describe('GET /api/classes/active-semester', () => {
     it('returns null when unset', async () => {
       const res = await request(app.getHttpServer()).get('/api/classes/active-semester');

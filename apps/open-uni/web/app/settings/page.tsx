@@ -92,9 +92,10 @@ export default function SettingsPage() {
   const [emailDraft, setEmailDraft] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
   const [emailMsg, setEmailMsg] = useState<{ msg: string; error?: boolean } | null>(null);
+  const [emailEnabled, setEmailEnabled] = useState(false);
 
   const [syncSections, setSyncSections] = useState<SyncSection[]>([]);
-  const [selectedSemesterKey, setSelectedSemesterKey] = useState(getSelectedSemester);
+  const [selectedSemesterKey, setSelectedSemesterKey] = useState('');
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -105,7 +106,9 @@ export default function SettingsPage() {
 
   const [credentialsStored, setCredentialsStored] = useState(false);
   const [credentialDraft, setCredentialDraft] = useState<StoredCredentials>(EMPTY_CREDENTIAL_DRAFT);
-  const [secretFlags, setSecretFlags] = useState<Record<SecretKey, boolean>>(getSecretFlags);
+  const [secretFlags, setSecretFlags] = useState<Record<SecretKey, boolean>>({
+    opalPassword: false, groqApiKey: false, geminiApiKey: false, anthropicApiKey: false,
+  });
   const [passphraseDraft, setPassphraseDraft] = useState('');
   const [savingCredentials, setSavingCredentials] = useState(false);
   const [credentialsMsg, setCredentialsMsg] = useState<{ msg: string; error?: boolean } | null>(null);
@@ -135,6 +138,10 @@ export default function SettingsPage() {
       const data: { email: string | null } = await fetch(apiUrl('/api/classes/notify-email')).then((r) => r.json());
       setEmailDraft(data.email || '');
     } catch { /* ignore */ }
+    try {
+      const data: { enabled: boolean } = await fetch(apiUrl('/api/classes/notify-email-enabled')).then((r) => r.json());
+      setEmailEnabled(data.enabled);
+    } catch { /* ignore */ }
   }, []);
 
   const initSyncPanel = useCallback(async () => {
@@ -148,6 +155,11 @@ export default function SettingsPage() {
   }, []);
 
   const knownSemesterKeys = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    const stored = getSelectedSemester();
+    if (stored) setSelectedSemesterKey(stored);
+  }, []);
 
   useEffect(() => {
     if (semesterOptions.length === 0) return;
@@ -205,6 +217,18 @@ export default function SettingsPage() {
       setEmailMsg({ msg: 'הכתובת נשמרה' });
     } catch { setEmailMsg({ msg: 'שגיאת רשת', error: true }); }
     finally { setSavingEmail(false); }
+  };
+
+  const toggleEmailEnabled = async () => {
+    const next = !emailEnabled;
+    setEmailEnabled(next);
+    try {
+      await fetch(apiUrl('/api/classes/notify-email-enabled'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      });
+    } catch { setEmailEnabled(!next); }
   };
 
   const saveCredentials = async () => {
@@ -380,12 +404,16 @@ export default function SettingsPage() {
         </div>
 
         {/* Notification email card */}
-        <div className="set-card set-card--wide">
+        <div className="set-card">
           <div className="set-card__h">
             <div>
               <div className="set-card__title">שליחת סיכומים למייל</div>
               <div className="set-card__sub">כתובת לשליחת סיכום לאחר עיבוד הרצאה</div>
             </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--muted)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={emailEnabled} onChange={toggleEmailEnabled} />
+              {emailEnabled ? 'פעיל' : 'כבוי'}
+            </label>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input

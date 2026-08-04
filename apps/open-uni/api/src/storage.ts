@@ -23,6 +23,14 @@ export function setNotifyEmail(email: string): void {
   setSetting('notifyEmail', email);
 }
 
+export function getNotifyEmailEnabled(): boolean {
+  return getSetting('notifyEmailEnabled') === '1';
+}
+
+export function setNotifyEmailEnabled(enabled: boolean): void {
+  setSetting('notifyEmailEnabled', enabled ? '1' : '0');
+}
+
 export interface ActiveSemester { semester: string; year: number }
 
 export function getActiveSemester(): ActiveSemester | null {

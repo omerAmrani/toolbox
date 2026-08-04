@@ -21,6 +21,19 @@ export class JobsController {
     res.json({ email });
   }
 
+  @Get('notify-email-enabled')
+  getNotifyEmailEnabled(@Res() res: Response) {
+    res.json({ enabled: this.storage.getNotifyEmailEnabled() });
+  }
+
+  @Put('notify-email-enabled')
+  updateNotifyEmailEnabled(@Body() body: any, @Res() res: Response) {
+    const { enabled } = body;
+    if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled (boolean) required' });
+    this.storage.setNotifyEmailEnabled(enabled);
+    res.json({ enabled });
+  }
+
   @Get('active-semester')
   getActiveSemester(@Res() res: Response) {
     res.json({ activeSemester: this.storage.getActiveSemester() });

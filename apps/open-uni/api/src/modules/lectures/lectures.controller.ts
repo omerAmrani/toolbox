@@ -1,17 +1,22 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Req, Res, UseGuards } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { Request, Response } from 'express';
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { EventEmitter } from 'events';
 import path from 'path';
 import { LecturesService } from './lectures.service';
 import { StorageService } from '../storage/storage.service';
 import { DownloadService } from '../download/download.service';
 import { SummarizeService } from '../summarize/summarize.service';
+import { EmailService } from '../email/email.service';
 import { SUMMARIZE_BACKEND, GEMINI_MODEL, CLAUDE_MODEL } from '../../config';
-import { OpalCredentials } from '../../credentials';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { tryAcquireJobSlot, releaseJobSlot } from '../../job-guard';
+import { TRANSCRIBE_QUEUE, TRANSCRIBE_JOB } from '../queue/queue.constants';
+import { encryptForQueue } from '../queue/queue-crypto';
+import { TranscribeJobData } from './transcribe.processor';
 
 @Controller('api/classes')
 @UseGuards(JwtAuthGuard)
@@ -21,6 +26,8 @@ export class LecturesController {
     private readonly storage: StorageService,
     private readonly download: DownloadService,
     private readonly summarizeService: SummarizeService,
+    private readonly email: EmailService,
+    @InjectQueue(TRANSCRIBE_QUEUE) private readonly transcribeQueue: Queue<TranscribeJobData>,
   ) {}
 
   // Ownership gate: every endpoint below touches a classId, so every one
@@ -44,6 +51,7 @@ export class LecturesController {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
     return (data: any) => res.write(`data: ${JSON.stringify(data)}\n\n`);
   }
 
@@ -111,8 +119,6 @@ export class LecturesController {
     const { opalUsername, opalPassword, opalId, groqApiKey } = body || {};
     if (!opalUsername || !opalPassword || !opalId) return res.status(400).json({ error: 'OPAL credentials required' });
     if (!groqApiKey) return res.status(400).json({ error: 'groqApiKey required' });
-    // never persisted server-side — in-memory for this request only, see credentials.ts
-    const opalCredentials: OpalCredentials = { username: opalUsername, password: opalPassword, id: opalId };
 
     const key = `${classId}/${lectureId}`;
 
@@ -130,59 +136,28 @@ export class LecturesController {
     const controller = new AbortController();
     this.lecturesService.activeJobs.set(key, { bus, controllers: new Map([['transcribe', controller]]) });
     this.attachSSEClient(bus, res, req);
-    const broadcast = (data: any) => bus.emit('event', data);
 
-    const dir = this.storage.lectureDirPath(classId, lectureId);
-    const transcriptPath = path.join(dir, 'transcript.txt');
-    const mp3Path = path.join(dir, 'audio.mp3');
+    this.storage.updateLectureMeta(classId, lectureId, { status: 'transcribing', lastError: null, lastErrorAt: null });
+
+    // Credentials never touch Redis in plaintext — encrypted here, decrypted
+    // only in TranscribeProcessor at dequeue time. See multi-user.md §1.
+    const encryptedCredentials = encryptForQueue({ opalUsername, opalPassword, opalId, groqApiKey });
+    const maxDurationSecs = body?.test ? 1800 : null;
 
     try {
-      this.storage.updateLectureMeta(classId, lectureId, { status: 'transcribing', lastError: null, lastErrorAt: null });
-
-      broadcast({ type: 'progress', step: 'login', message: 'מתחבר לאוניברסיטה הפתוחה...' });
-      const videoUrl = await this.download.extractVideoUrl(
-        lecture.url,
-        opalCredentials,
-        (msg: string) => broadcast({ type: 'progress', step: 'login', message: msg }),
-        controller.signal,
+      await this.transcribeQueue.add(
+        TRANSCRIBE_JOB,
+        { classId, lectureId, userId, encryptedCredentials, maxDurationSecs },
+        { removeOnComplete: true, removeOnFail: true },
       );
-
-      broadcast({ type: 'progress', step: 'download', message: 'מוריד ומתמלל...' });
-      const maxDuration = body?.test ? 1800 : null;
-      const transcript = await this.download.downloadAndTranscribe(
-        videoUrl,
-        groqApiKey,
-        (msg: string) => broadcast({ type: 'progress', step: 'transcribe', message: msg }),
-        null,
-        mp3Path,
-        maxDuration,
-        controller.signal,
-      );
-
-      writeFileSync(transcriptPath, transcript);
-
-      if (existsSync(mp3Path)) {
-        unlinkSync(mp3Path);
-        console.log('[pipeline] deleted audio.mp3 after transcript saved');
-      }
-
-      this.storage.updateLectureMeta(classId, lectureId, {
-        status: 'transcribed',
-        whisperBackend: 'groq-whisper',
-      });
-
-      broadcast({ type: 'done', status: 'transcribed' });
     } catch (err: any) {
-      const aborted = controller.signal.aborted;
-      if (aborted) console.log(`[transcribe] aborted: ${classId}/${lectureId}`);
-      else console.error(`[transcribe] error: ${classId}/${lectureId}`, err.message);
+      console.error(`[transcribe] enqueue failed: ${key}`, err.message);
       this.storage.updateLectureMeta(classId, lectureId, {
         status: 'pending',
-        lastError: aborted ? 'בוטל על ידי המשתמש' : err.message,
+        lastError: err.message,
         lastErrorAt: new Date().toISOString(),
       });
-      broadcast({ type: aborted ? 'aborted' : 'error', message: err.message });
-    } finally {
+      bus.emit('event', { type: 'error', message: err.message });
       this.lecturesService.activeJobs.delete(key);
       releaseJobSlot(userId);
       bus.emit('end');
@@ -200,7 +175,8 @@ export class LecturesController {
     @Res() res: Response,
   ) {
     if (!this.requireOwnedClass(classId, userId, res)) return;
-    if (!this.requireLecture(classId, lectureId, res)) return;
+    const lecture = this.requireLecture(classId, lectureId, res);
+    if (!lecture) return;
 
     const dir = this.storage.lectureDirPath(classId, lectureId);
     const transcriptPath = path.join(dir, 'transcript.txt');
@@ -250,6 +226,18 @@ export class LecturesController {
       });
 
       console.log(`[summarize] done: ${classId}/${lectureId}`);
+
+      if (this.storage.getNotifyEmailEnabled()) {
+        const cls = this.storage.getClass(classId);
+        this.email.sendLectureSummary({
+          to: this.storage.getNotifyEmail(),
+          className: cls.name,
+          lectureName: lecture.name,
+          lectureDate: lecture.lectureDate,
+          summaryContent: summary,
+        }).catch((err: any) => console.error(`[summarize] email send failed: ${classId}/${lectureId}`, err.message));
+      }
+
       send({ type: 'done', summary, status: 'summarized' });
     } catch (err: any) {
       const aborted = controller.signal.aborted;

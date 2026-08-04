@@ -1,16 +1,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
 import request from 'supertest';
 import { writeFileSync, mkdirSync } from 'fs';
 import path from 'path';
 import { LecturesModule } from '../src/modules/lectures/lectures.module';
+import { LecturesController } from '../src/modules/lectures/lectures.controller';
+import { TranscribeProcessor } from '../src/modules/lectures/transcribe.processor';
 import { DownloadService } from '../src/modules/download/download.service';
 import { SummarizeService } from '../src/modules/summarize/summarize.service';
+import { EmailService } from '../src/modules/email/email.service';
 import { ClassesModule } from '../src/modules/classes/classes.module';
 import { StorageService } from '../src/modules/storage/storage.service';
 import { truncateAll, cleanClassesDir } from './helpers/db';
 import { authCookie } from './helpers/auth';
 import { tryAcquireJobSlot, releaseJobSlot } from '../src/job-guard';
+import { TRANSCRIBE_QUEUE, TRANSCRIBE_JOB } from '../src/modules/queue/queue.constants';
+import { decryptFromQueue } from '../src/modules/queue/queue-crypto';
 
 const mockDownload = {
   extractVideoUrl: jest.fn().mockResolvedValue('https://example.com/video.mp4'),
@@ -23,6 +29,33 @@ const mockSummarize = {
   }),
   withAbort: jest.fn().mockImplementation((p: Promise<any>) => p),
 };
+
+const mockEmail = {
+  sendLectureSummary: jest.fn().mockResolvedValue(undefined),
+};
+
+const mockQueue = {
+  add: jest.fn().mockResolvedValue({ id: 'job-1' }),
+};
+
+// A successful enqueue leaves the SSE response open indefinitely in this
+// mocked setup (no real worker runs to emit 'done'/'end', and superagent's
+// 'response' event only fires once the body fully ends — never, here). So
+// the enqueue path is exercised by calling the controller method directly
+// with fake req/res instead of going over HTTP.
+function fakeRes() {
+  return {
+    setHeader: jest.fn(),
+    flushHeaders: jest.fn(),
+    write: jest.fn(),
+    end: jest.fn(),
+    status: jest.fn().mockReturnThis(),
+    json: jest.fn().mockReturnThis(),
+  } as any;
+}
+function fakeReq() {
+  return { on: jest.fn() } as any;
+}
 
 function parseSSE(raw: string): any[] {
   return raw
@@ -37,6 +70,7 @@ const USER_B = 'user-b';
 describe('LecturesController', () => {
   let app: INestApplication;
   let storage: StorageService;
+  let controller: LecturesController;
   let classId: string;
 
   const get = (path: string, user: string | null = USER_A) => {
@@ -62,11 +96,20 @@ describe('LecturesController', () => {
     })
       .overrideProvider(DownloadService).useValue(mockDownload)
       .overrideProvider(SummarizeService).useValue(mockSummarize)
+      .overrideProvider(EmailService).useValue(mockEmail)
+      .overrideProvider(getQueueToken(TRANSCRIBE_QUEUE)).useValue(mockQueue)
+      // Real class carries the @Processor decorator's metadata, which makes
+      // BullExplorer spin up a real BullMQ Worker (Redis connection) on
+      // app.init() — a plain useValue has no such metadata, so it's skipped.
+      // The processor's own logic is unit-tested directly in
+      // transcribe-processor.spec.ts instead.
+      .overrideProvider(TranscribeProcessor).useValue({})
       .compile();
 
     app = module.createNestApplication();
     await app.init();
     storage = module.get<StorageService>(StorageService);
+    controller = module.get<LecturesController>(LecturesController);
   });
 
   afterAll(async () => {
@@ -264,6 +307,34 @@ describe('LecturesController', () => {
 
       const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('summarized');
+      expect(mockEmail.sendLectureSummary).not.toHaveBeenCalled();
+    });
+
+    it('sends a notification email when the toggle is on', async () => {
+      storage.setNotifyEmailEnabled(true);
+      storage.setNotifyEmail('me@example.com');
+
+      const created = await post(`/api/classes/${classId}/lectures`)
+        .send({ name: 'L', url: 'https://example.com' });
+      const id = created.body.id;
+
+      const dir = storage.lectureDirPath(classId, id);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(path.join(dir, 'transcript.txt'), 'Test transcript for summarization');
+
+      await post(`/api/classes/${classId}/lectures/${id}/summarize`)
+        .send({ geminiApiKey: 'test-gemini-key' })
+        .buffer(true)
+        .parse((response, callback) => {
+          let data = '';
+          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+          response.on('end', () => callback(null, data));
+        });
+
+      expect(mockEmail.sendLectureSummary).toHaveBeenCalledWith(expect.objectContaining({
+        to: 'me@example.com',
+        summaryContent: 'Mock summary content',
+      }));
     });
 
     it('reverts status to transcribed with lastError when summarization throws', async () => {
@@ -297,35 +368,40 @@ describe('LecturesController', () => {
   // ── Transcribe SSE ─────────────────────────────────────────────────────────
 
   describe('POST .../transcribe', () => {
-    it('streams SSE events and sets status to transcribed on success', async () => {
+    it('enqueues a transcribe job with encrypted credentials and marks status as transcribing', async () => {
       const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
-      const res = await post(`/api/classes/${classId}/lectures/${id}/transcribe`)
-        .send({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' })
-        .buffer(true)
-        .parse((response, callback) => {
-          let data = '';
-          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-          response.on('end', () => callback(null, data));
-        });
+      await controller.transcribe(
+        USER_A, classId, id,
+        { opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' },
+        fakeReq(), fakeRes(),
+      );
 
-      const events = parseSSE(typeof res.body === 'string' ? res.body : res.text);
-      const done = events.find((e: any) => e.type === 'done');
-      expect(done).toBeDefined();
-      expect(done.status).toBe('transcribed');
+      expect(mockQueue.add).toHaveBeenCalledTimes(1);
+      const [jobName, jobData] = mockQueue.add.mock.calls[0];
+      expect(jobName).toBe(TRANSCRIBE_JOB);
+      expect(jobData).toMatchObject({ classId, lectureId: id, userId: USER_A });
+      expect(jobData.encryptedCredentials).not.toContain('opalPassword');
+      expect(decryptFromQueue(jobData.encryptedCredentials)).toEqual({
+        opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key',
+      });
 
       const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
-      expect(statusRes.body.status).toBe('transcribed');
+      expect(statusRes.body.status).toBe('transcribing');
+
+      // Only the processor's finally block releases this in production —
+      // bypassed here since we called the controller directly.
+      releaseJobSlot(USER_A);
     });
 
-    it('streams error event and reverts status to pending with lastError when download throws', async () => {
+    it('streams error event and reverts status to pending with lastError when enqueue fails', async () => {
       const created = await post(`/api/classes/${classId}/lectures`)
         .send({ name: 'L', url: 'https://example.com' });
       const id = created.body.id;
 
-      mockDownload.extractVideoUrl.mockRejectedValueOnce(new Error('Login failed'));
+      mockQueue.add.mockRejectedValueOnce(new Error('Queue unavailable'));
 
       const res = await post(`/api/classes/${classId}/lectures/${id}/transcribe`)
         .send({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' })
@@ -339,11 +415,11 @@ describe('LecturesController', () => {
       const events = parseSSE(typeof res.body === 'string' ? res.body : res.text);
       const errorEvent = events.find((e: any) => e.type === 'error');
       expect(errorEvent).toBeDefined();
-      expect(errorEvent.message).toBe('Login failed');
+      expect(errorEvent.message).toBe('Queue unavailable');
 
       const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('pending');
-      expect(statusRes.body.lastError).toBe('Login failed');
+      expect(statusRes.body.lastError).toBe('Queue unavailable');
     });
 
     it('rejects transcribe with 429 while the same user already holds the job slot, but allows another user', async () => {
@@ -357,17 +433,16 @@ describe('LecturesController', () => {
 
       const otherClass = await post('/api/classes', USER_B).send({ name: 'B Class' });
       const otherLecture = await post(`/api/classes/${otherClass.body.id}/lectures`, USER_B).send({ name: 'L', url: 'https://example.com/3' });
-      const otherUserRes = await post(`/api/classes/${otherClass.body.id}/lectures/${otherLecture.body.id}/transcribe`, USER_B)
-        .send({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' })
-        .buffer(true)
-        .parse((response, callback) => {
-          let data = '';
-          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-          response.on('end', () => callback(null, data));
-        });
-      expect(otherUserRes.status).not.toBe(429);
+      const otherRes = fakeRes();
+      await controller.transcribe(
+        USER_B, otherClass.body.id, otherLecture.body.id,
+        { opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'test-groq-key' },
+        fakeReq(), otherRes,
+      );
+      expect(otherRes.status).not.toHaveBeenCalledWith(429);
 
       releaseJobSlot(USER_A);
+      releaseJobSlot(USER_B);
     });
   });
 

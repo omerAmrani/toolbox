@@ -32,7 +32,7 @@ There is no `skipped` status — every lecture created (manually or via sync/cro
 - Per-user concurrency cap: a user can only have one active transcribe/detect/sync job at a time (across all classes/lectures) — a second one returns `429` (`src/job-guard.ts`). This is separate from the "attach to existing bus" case above, which is a reconnect to the *same* job, not a second one.
 
 **Summarize (SSE):** `POST .../summarize`
-- reads `transcript.txt` → summarizes via backend → saves versioned summary → sets as current
+- reads `transcript.txt` → summarizes via backend → saves versioned summary → sets as current → if `notifyEmailEnabled` is on, sends the summary to the configured notify email (fire-and-forget, failure is logged and does not fail the job — see `docs/email.md`)
 - Body: `{ backend: 'gemini' | 'claude' }` overrides config default; `{ geminiApiKey }` or `{ anthropicApiKey }` required to match whichever backend is used (400 if missing)
 
 **SSE event shapes:**
