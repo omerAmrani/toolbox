@@ -16,9 +16,9 @@ async function bootstrap() {
   });
 
   const port = PORT;
-  await app.listen(port, '127.0.0.1');
+  await app.listen(port, '0.0.0.0');
   console.log(`\n🔧  Open University API`);
-  console.log(`🌐  Listening on 127.0.0.1:${port}\n`);
+  console.log(`🌐  Listening on 0.0.0.0:${port}\n`);
 }
 
 bootstrap();
