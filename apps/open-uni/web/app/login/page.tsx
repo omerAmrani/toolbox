@@ -33,6 +33,8 @@ export default function LoginPage() {
         <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <input
             type="email"
+            name="email"
+            autoComplete="email"
             required
             placeholder="האימייל שלך"
             value={email}

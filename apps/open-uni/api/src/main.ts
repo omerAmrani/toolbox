@@ -15,6 +15,14 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.use((req: any, res: any, next: () => void) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms ip=${req.ip}`);
+    });
+    next();
+  });
+
   const port = PORT;
   await app.listen(port, '0.0.0.0');
   console.log(`\n🔧  Open University API`);
