@@ -8,6 +8,7 @@
     "start": "node dist/src/main.js",
     "start:prod": "node dist/src/main.js",
     "install:playwright": "npx playwright install chromium",
+    "docker": "docker build -f Dockerfile -t toolbox-open-uni-api ../../.. && docker run --rm -p 3001:3001 --env-file .env toolbox-open-uni-api",
     "test": "NODE_ENV=test jest --runInBand",
     "test:watch": "NODE_ENV=test jest --runInBand --watch",
     "test:coverage": "NODE_ENV=test jest --runInBand --coverage"
