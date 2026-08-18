@@ -89,11 +89,6 @@ export default function SettingsPage() {
   const [reloadMsg, setReloadMsg] = useState('');
   const [reloading, setReloading] = useState(false);
 
-  const [emailDraft, setEmailDraft] = useState('');
-  const [savingEmail, setSavingEmail] = useState(false);
-  const [emailMsg, setEmailMsg] = useState<{ msg: string; error?: boolean } | null>(null);
-  const [emailEnabled, setEmailEnabled] = useState(false);
-
   const [syncSections, setSyncSections] = useState<SyncSection[]>([]);
   const [selectedSemesterKey, setSelectedSemesterKey] = useState('');
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
@@ -132,17 +127,6 @@ export default function SettingsPage() {
       return (SEMESTER_ORDER[b.semester] ?? 0) - (SEMESTER_ORDER[a.semester] ?? 0);
     });
   }, [syncSections]);
-
-  const loadNotifyEmail = useCallback(async () => {
-    try {
-      const data: { email: string | null } = await fetch(apiUrl('/api/classes/notify-email')).then((r) => r.json());
-      setEmailDraft(data.email || '');
-    } catch { /* ignore */ }
-    try {
-      const data: { enabled: boolean } = await fetch(apiUrl('/api/classes/notify-email-enabled')).then((r) => r.json());
-      setEmailEnabled(data.enabled);
-    } catch { /* ignore */ }
-  }, []);
 
   const initSyncPanel = useCallback(async () => {
     try {
@@ -195,41 +179,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadDataDir();
-    loadNotifyEmail();
     setCredentialsStored(hasStoredCredentials());
     setCredentialDraft(draftFromPlainFields(getPlainFields()));
     setSecretFlags(getSecretFlags());
     initSyncPanel();
-  }, [loadDataDir, loadNotifyEmail, initSyncPanel]);
-
-  const saveNotifyEmail = async () => {
-    setSavingEmail(true);
-    setEmailMsg(null);
-    try {
-      const res = await fetch(apiUrl('/api/classes/notify-email'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailDraft }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setEmailMsg({ msg: data.error || 'שגיאה', error: true }); return; }
-      setEmailDraft(data.email);
-      setEmailMsg({ msg: 'הכתובת נשמרה' });
-    } catch { setEmailMsg({ msg: 'שגיאת רשת', error: true }); }
-    finally { setSavingEmail(false); }
-  };
-
-  const toggleEmailEnabled = async () => {
-    const next = !emailEnabled;
-    setEmailEnabled(next);
-    try {
-      await fetch(apiUrl('/api/classes/notify-email-enabled'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: next }),
-      });
-    } catch { setEmailEnabled(!next); }
-  };
+  }, [loadDataDir, initSyncPanel]);
 
   const saveCredentials = async () => {
     if (!passphraseDraft.trim()) { setCredentialsMsg({ msg: 'יש להזין סיסמת הצפנה', error: true }); return; }
@@ -403,38 +357,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Notification email card */}
-        <div className="set-card">
-          <div className="set-card__h">
-            <div>
-              <div className="set-card__title">שליחת סיכומים למייל</div>
-              <div className="set-card__sub">כתובת לשליחת סיכום לאחר עיבוד הרצאה</div>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--muted)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={emailEnabled} onChange={toggleEmailEnabled} />
-              {emailEnabled ? 'פעיל' : 'כבוי'}
-            </label>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="email"
-              value={emailDraft}
-              onChange={(e) => setEmailDraft(e.target.value)}
-              placeholder="you@example.com"
-              className="text-field text-field--full"
-              style={{ flex: 1 }}
-            />
-            <Button onClick={saveNotifyEmail} disabled={savingEmail}>
-              {savingEmail ? 'שומר...' : 'שמור'}
-            </Button>
-          </div>
-          {emailMsg && (
-            <div style={{ marginTop: 8, fontSize: '0.82rem', color: emailMsg.error ? 'var(--danger)' : 'var(--good)' }}>
-              {emailMsg.msg}
-            </div>
-          )}
-        </div>
-
         {/* Storage card */}
         <div className="set-card">
           <div className="set-card__h">
@@ -566,8 +488,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* AI Models — full width */}
-        <div className="set-card set-card--wide">
+        {/* AI Models */}
+        <div className="set-card">
           <div className="set-card__h">
             <div>
               <div className="set-card__title">מודלי בינה מלאכותית</div>

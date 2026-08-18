@@ -65,14 +65,9 @@ db.exec(`
     email TEXT NOT NULL UNIQUE,
     createdAt TEXT NOT NULL
   );
-
-  CREATE TABLE IF NOT EXISTS magic_link_tokens (
-    tokenHash TEXT PRIMARY KEY,
-    email TEXT NOT NULL,
-    expiresAt TEXT NOT NULL,
-    usedAt TEXT
-  );
 `);
+
+db.exec('DROP TABLE IF EXISTS magic_link_tokens;');
 
 try { db.exec('ALTER TABLE summaries ADD COLUMN model TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE classes ADD COLUMN code TEXT'); } catch (_) {}

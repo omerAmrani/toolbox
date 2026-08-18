@@ -9,7 +9,6 @@ import { LecturesService } from './lectures.service';
 import { StorageService } from '../storage/storage.service';
 import { DownloadService } from '../download/download.service';
 import { SummarizeService } from '../summarize/summarize.service';
-import { EmailService } from '../email/email.service';
 import { SUMMARIZE_BACKEND, GEMINI_MODEL, CLAUDE_MODEL } from '../../config';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
@@ -26,7 +25,6 @@ export class LecturesController {
     private readonly storage: StorageService,
     private readonly download: DownloadService,
     private readonly summarizeService: SummarizeService,
-    private readonly email: EmailService,
     @InjectQueue(TRANSCRIBE_QUEUE) private readonly transcribeQueue: Queue<TranscribeJobData>,
   ) {}
 
@@ -140,7 +138,7 @@ export class LecturesController {
     this.storage.updateLectureMeta(classId, lectureId, { status: 'transcribing', lastError: null, lastErrorAt: null });
 
     // Credentials never touch Redis in plaintext — encrypted here, decrypted
-    // only in TranscribeProcessor at dequeue time. See multi-user.md §1.
+    // only in TranscribeProcessor at dequeue time.
     const encryptedCredentials = encryptForQueue({ opalUsername, opalPassword, opalId, groqApiKey });
     const maxDurationSecs = body?.test ? 1800 : null;
 
@@ -226,17 +224,6 @@ export class LecturesController {
       });
 
       console.log(`[summarize] done: ${classId}/${lectureId}`);
-
-      if (this.storage.getNotifyEmailEnabled()) {
-        const cls = this.storage.getClass(classId);
-        this.email.sendLectureSummary({
-          to: this.storage.getNotifyEmail(),
-          className: cls.name,
-          lectureName: lecture.name,
-          lectureDate: lecture.lectureDate,
-          summaryContent: summary,
-        }).catch((err: any) => console.error(`[summarize] email send failed: ${classId}/${lectureId}`, err.message));
-      }
 
       send({ type: 'done', summary, status: 'summarized' });
     } catch (err: any) {

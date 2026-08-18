@@ -2,7 +2,6 @@ import { Controller, Get, Post, Body, Query, Req, Res, UseGuards } from '@nestjs
 import { Request, Response } from 'express';
 import { StorageService } from '../storage/storage.service';
 import { DetectService } from '../detect/detect.service';
-import { EmailService } from '../email/email.service';
 import { OpalCredentials } from '../../credentials';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
@@ -14,7 +13,6 @@ export class PipelineController {
   constructor(
     private readonly storage: StorageService,
     private readonly detect: DetectService,
-    private readonly email: EmailService,
   ) {}
 
   @Get('queue')
@@ -90,24 +88,6 @@ export class PipelineController {
       res.end();
     } finally {
       releaseJobSlot(userId);
-    }
-  }
-
-  @Post('test-email')
-  async testEmail(@CurrentUser() userId: string, @Body() body: any, @Res() res: Response) {
-    const { classId, lectureId } = body;
-    if (!classId || !lectureId) return res.status(400).json({ error: 'classId and lectureId required' });
-    if (!this.storage.getClassForUser(classId, userId)) return res.status(404).json({ error: 'Not found' });
-    const cls = this.storage.getClass(classId);
-    const lecture = this.storage.getLecture(classId, lectureId);
-    if (!cls || !lecture) return res.status(404).json({ error: 'Not found' });
-    const summaryContent = this.storage.getCurrentSummaryContent(classId, lectureId);
-    if (!summaryContent) return res.status(400).json({ error: 'No summary found for this lecture' });
-    try {
-      await this.email.sendLectureSummary({ to: this.storage.getNotifyEmail(), className: cls.name, lectureName: lecture.name, lectureDate: lecture.lectureDate, summaryContent });
-      res.json({ ok: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
     }
   }
 }

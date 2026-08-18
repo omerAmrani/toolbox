@@ -1,51 +1,46 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { createHash, randomBytes } from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { StorageService } from '../storage/storage.service';
-import { EmailService } from '../email/email.service';
-import { API_ORIGIN, WEB_ORIGIN } from '../../config';
+import { WEB_ORIGIN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } from '../../config';
 
-const TOKEN_TTL_MS = 15 * 60 * 1000;
-const RATE_LIMIT_MS = 60 * 1000;
-
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
+const GOOGLE_SCOPES = ['openid', 'email'];
 
 @Injectable()
 export class AuthService {
-  // ponytail: in-memory cooldown, single-instance deployment — move to a shared
-  // store (Redis) if this ever runs multi-instance.
-  private readonly lastRequestAt = new Map<string, number>();
-
   constructor(
     private readonly storage: StorageService,
-    private readonly email: EmailService,
     private readonly jwt: JwtService,
   ) {}
 
-  async requestLink(email: string): Promise<void> {
-    const normalized = email.trim().toLowerCase();
-    if (!normalized || !normalized.includes('@')) throw new BadRequestException('Invalid email');
-
-    const last = this.lastRequestAt.get(normalized);
-    if (last && Date.now() - last < RATE_LIMIT_MS) return; // silently drop — no signal to a spammer
-
-    this.lastRequestAt.set(normalized, Date.now());
-
-    const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
-    this.storage.createMagicLinkToken(hashToken(token), normalized, expiresAt);
-
-    const verifyUrl = `${API_ORIGIN}/api/auth/verify?token=${token}`;
-    await this.email.sendMagicLink(normalized, verifyUrl);
+  private googleClient(): OAuth2Client {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      throw new Error('Google OAuth is not configured — set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET');
+    }
+    return new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI);
   }
 
-  verify(token: string): { cookieValue: string; redirectTo: string } {
-    const consumed = this.storage.consumeMagicLinkToken(hashToken(token));
-    if (!consumed) throw new BadRequestException('Invalid or expired link');
+  getGoogleAuthUrl(): string {
+    return this.googleClient().generateAuthUrl({ scope: GOOGLE_SCOPES });
+  }
 
-    const user = this.storage.getOrCreateUser(consumed.email);
+  async handleGoogleCallback(code: string): Promise<{ email: string }> {
+    const client = this.googleClient();
+    const { tokens } = await client.getToken(code);
+    if (!tokens.id_token) throw new BadRequestException('Google did not return an id token');
+
+    const ticket = await client.verifyIdToken({ idToken: tokens.id_token, audience: GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload();
+    if (!payload?.email || !payload.email_verified) {
+      throw new BadRequestException('Google account has no verified email');
+    }
+
+    return { email: payload.email.toLowerCase() };
+  }
+
+  async loginWithGoogle(code: string): Promise<{ cookieValue: string; redirectTo: string }> {
+    const { email } = await this.handleGoogleCallback(code);
+    const user = this.storage.getOrCreateUser(email);
     const cookieValue = this.jwt.sign({ sub: user.id, email: user.email });
     return { cookieValue, redirectTo: WEB_ORIGIN };
   }

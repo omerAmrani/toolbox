@@ -6,7 +6,6 @@ import { ClassesModule } from '../src/modules/classes/classes.module';
 import { DetectService } from '../src/modules/detect/detect.service';
 import { DownloadService } from '../src/modules/download/download.service';
 import { SummarizeService } from '../src/modules/summarize/summarize.service';
-import { EmailService } from '../src/modules/email/email.service';
 import { StorageService } from '../src/modules/storage/storage.service';
 import { truncateAll, cleanClassesDir } from './helpers/db';
 import { authCookie } from './helpers/auth';
@@ -30,10 +29,6 @@ const mockSummarize = {
   withAbort: jest.fn().mockImplementation((p: Promise<any>) => p),
 };
 
-const mockEmail = {
-  sendLectureSummary: jest.fn().mockResolvedValue(undefined),
-};
-
 function parseSSE(raw: string): any[] {
   return raw
     .split('\n\n')
@@ -52,7 +47,6 @@ describe('PipelineController', () => {
       .overrideProvider(DetectService).useValue(mockDetect)
       .overrideProvider(DownloadService).useValue(mockDownload)
       .overrideProvider(SummarizeService).useValue(mockSummarize)
-      .overrideProvider(EmailService).useValue(mockEmail)
       .compile();
 
     app = module.createNestApplication();
@@ -225,40 +219,4 @@ describe('PipelineController', () => {
     });
   });
 
-  describe('POST /api/classes/test-email', () => {
-    it('returns 400 when classId or lectureId is missing', async () => {
-      const res = await post('/api/classes/test-email')
-        .send({ classId: 'only-class' });
-      expect(res.status).toBe(400);
-    });
-
-    it('returns 404 when class or lecture does not exist', async () => {
-      const res = await post('/api/classes/test-email')
-        .send({ classId: 'bad-class', lectureId: 'bad-lecture' });
-      expect(res.status).toBe(404);
-    });
-
-    it('returns 400 when lecture has no summary', async () => {
-      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 }, USER);
-      const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
-
-      const res = await post('/api/classes/test-email')
-        .send({ classId: cls.id, lectureId: lec.id });
-      expect(res.status).toBe(400);
-    });
-
-    it('sends email and returns ok when lecture has a summary', async () => {
-      const cls = storage.createClass({ name: 'C', semester: 'A', year: 2025 }, USER);
-      const lec = storage.createLecture(cls.id, { name: 'L', url: 'https://example.com', status: 'pending' });
-      storage.saveSummaryVersion(cls.id, lec.id, 'My summary content', 'gemini');
-
-      const res = await post('/api/classes/test-email')
-        .send({ classId: cls.id, lectureId: lec.id });
-      expect(res.status).toBe(201);
-      expect(res.body.ok).toBe(true);
-      expect(mockEmail.sendLectureSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ summaryContent: 'My summary content' }),
-      );
-    });
-  });
 });

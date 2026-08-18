@@ -24,7 +24,6 @@ Single-page control panel at `/settings` for managing app configuration, the pro
 - List area is capped at 320px with internal scroll to avoid stretching the adjacent settings card
 - There's no separate processing-queue panel — a lecture created here processes the same way as any other `pending` lecture (per-lecture action on the class page)
 - There is no automatic/unattended detection anymore — the old cron (`runFullPipeline`, `SchedulerRegistry`) was removed because it can't work with per-user, client-side-only credentials (no browser open to decrypt them for an unattended run); "בדוק עכשיו" is a manual, per-user trigger only
-- Email field for the summary/detection recipient, saved via `PUT /api/classes/notify-email`
 
 **Credentials** (all requests carry the session's `auth_token` cookie — every class/lecture/sync/credential is scoped to the logged-in user, see `apps/open-uni/api/docs/classes.md`):
 - OpenU username/ID/password + Groq/Gemini/Anthropic API keys, encrypted client-side with a user passphrase (WebCrypto `PBKDF2` + `AES-GCM`) and stored in `localStorage` — see `lib/credentials.ts`. Nothing is sent to or persisted by the server except per-request, in-memory, for the life of that one call (sync, transcribe, summarize, health check)

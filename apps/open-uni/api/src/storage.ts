@@ -15,22 +15,6 @@ function setSetting(key: string, value: string): void {
   db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
 }
 
-export function getNotifyEmail(): string | null {
-  return getSetting('notifyEmail');
-}
-
-export function setNotifyEmail(email: string): void {
-  setSetting('notifyEmail', email);
-}
-
-export function getNotifyEmailEnabled(): boolean {
-  return getSetting('notifyEmailEnabled') === '1';
-}
-
-export function setNotifyEmailEnabled(enabled: boolean): void {
-  setSetting('notifyEmailEnabled', enabled ? '1' : '0');
-}
-
 export interface ActiveSemester { semester: string; year: number }
 
 export function getActiveSemester(): ActiveSemester | null {
@@ -226,7 +210,7 @@ export function deleteSummaryVersion(classId: string, lectureId: string, summary
   return true;
 }
 
-// ── Users & magic-link tokens ───────────────────────────────────────────────────
+// ── Users ────────────────────────────────────────────────────────────────────
 export interface User { id: string; email: string; createdAt: string }
 
 export function getUserByEmail(email: string): User | null {
@@ -241,18 +225,6 @@ export function createUser(email: string): User {
 
 export function getOrCreateUser(email: string): User {
   return getUserByEmail(email) || createUser(email);
-}
-
-export function createMagicLinkToken(tokenHash: string, email: string, expiresAt: string): void {
-  db.prepare('INSERT INTO magic_link_tokens (tokenHash, email, expiresAt) VALUES (?, ?, ?)').run(tokenHash, email, expiresAt);
-}
-
-export function consumeMagicLinkToken(tokenHash: string): { email: string } | null {
-  const row = db.prepare('SELECT email, expiresAt, usedAt FROM magic_link_tokens WHERE tokenHash = ?').get(tokenHash) as
-    { email: string; expiresAt: string; usedAt: string | null } | undefined;
-  if (!row || row.usedAt || new Date(row.expiresAt) < new Date()) return null;
-  db.prepare('UPDATE magic_link_tokens SET usedAt = ? WHERE tokenHash = ?').run(new Date().toISOString(), tokenHash);
-  return { email: row.email };
 }
 
 // ── Reload from disk ──────────────────────────────────────────────────────────

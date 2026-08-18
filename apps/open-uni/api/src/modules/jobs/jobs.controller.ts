@@ -6,34 +6,6 @@ import { StorageService } from '../storage/storage.service';
 export class JobsController {
   constructor(private readonly storage: StorageService) {}
 
-  @Get('notify-email')
-  getNotifyEmail(@Res() res: Response) {
-    res.json({ email: this.storage.getNotifyEmail() });
-  }
-
-  @Put('notify-email')
-  updateNotifyEmail(@Body() body: any, @Res() res: Response) {
-    const { email } = body;
-    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ error: 'valid email required' });
-    }
-    this.storage.setNotifyEmail(email);
-    res.json({ email });
-  }
-
-  @Get('notify-email-enabled')
-  getNotifyEmailEnabled(@Res() res: Response) {
-    res.json({ enabled: this.storage.getNotifyEmailEnabled() });
-  }
-
-  @Put('notify-email-enabled')
-  updateNotifyEmailEnabled(@Body() body: any, @Res() res: Response) {
-    const { enabled } = body;
-    if (typeof enabled !== 'boolean') return res.status(400).json({ error: 'enabled (boolean) required' });
-    this.storage.setNotifyEmailEnabled(enabled);
-    res.json({ enabled });
-  }
-
   @Get('active-semester')
   getActiveSemester(@Res() res: Response) {
     res.json({ activeSemester: this.storage.getActiveSemester() });

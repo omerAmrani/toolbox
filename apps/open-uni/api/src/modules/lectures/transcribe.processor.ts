@@ -25,8 +25,8 @@ interface TranscribeCredentials {
   groqApiKey: string;
 }
 
-// Runs in-process for now (monolith, see multi-user.md §2) — moves to a
-// standalone worker later by pointing this at the same Redis, no redesign.
+// Runs in-process for now (monolith) — moves to a standalone worker later
+// by pointing this at the same Redis, no redesign (see todo-features.md).
 @Processor(TRANSCRIBE_QUEUE, { concurrency: 3 })
 export class TranscribeProcessor extends WorkerHost {
   constructor(

@@ -5,14 +5,14 @@ NestJS API, port 3001. TypeScript, `better-sqlite3` (no ORM), `@nestjs/schedule`
 ## Module boundary rule
 
 Two module types — never violate the boundary:
-- **Utils** (no DB, no external AI): `StorageModule`, `DetectModule`, `DownloadModule`, `WhisperModule`, `SummarizeModule`, `EmailModule`
+- **Utils** (no DB, no external AI): `StorageModule`, `DetectModule`, `DownloadModule`, `WhisperModule`, `SummarizeModule`
 - **App logic** (owns a domain, may use DB + AI): `ClassesModule`, `LecturesModule`, `PipelineModule`, `JobsModule`
 
 App logic → utils: allowed. Utils → app logic: never.
 
 ## Config
 
-Single entrypoint: `src/config.ts` — dotenv + exports. Import from there, not from `process.env` directly. Key vars: `SUMMARIZE_BACKEND`, `OUTPUT_LANG`, `OPENU_USERNAME/PASSWORD/ID`, `GMAIL_*`.
+Single entrypoint: `src/config.ts` — dotenv + exports. Import from there, not from `process.env` directly. Key vars: `SUMMARIZE_BACKEND`, `OUTPUT_LANG`, `OPENU_USERNAME/PASSWORD/ID`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`.
 
 ## Data storage
 

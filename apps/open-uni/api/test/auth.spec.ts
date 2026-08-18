@@ -2,26 +2,35 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AuthModule } from '../src/modules/auth/auth.module';
-import { EmailService } from '../src/modules/email/email.service';
+import { AuthService } from '../src/modules/auth/auth.service';
 import { AUTH_COOKIE } from '../src/common/jwt-auth.guard';
-import { WEB_ORIGIN } from '../src/config';
+import { WEB_ORIGIN, GOOGLE_CLIENT_ID } from '../src/config';
 import { truncateAll } from './helpers/db';
 
-function extractToken(verifyUrl: string): string {
-  return new URL(verifyUrl).searchParams.get('token')!;
+const mockGetToken = jest.fn();
+const mockVerifyIdToken = jest.fn();
+const mockGenerateAuthUrl = jest.fn();
+
+jest.mock('google-auth-library', () => ({
+  OAuth2Client: jest.fn().mockImplementation(() => ({
+    generateAuthUrl: mockGenerateAuthUrl,
+    getToken: mockGetToken,
+    verifyIdToken: mockVerifyIdToken,
+  })),
+}));
+
+function mockGoogleUser(email: string, verified = true) {
+  mockGetToken.mockResolvedValue({ tokens: { id_token: 'mock-id-token' } });
+  mockVerifyIdToken.mockResolvedValue({ getPayload: () => ({ email, email_verified: verified }) });
 }
 
 describe('AuthController', () => {
   let app: INestApplication;
-  const sendMagicLink = jest.fn().mockResolvedValue(undefined);
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [AuthModule],
-    })
-      .overrideProvider(EmailService)
-      .useValue({ sendMagicLink })
-      .compile();
+    }).compile();
 
     app = module.createNestApplication();
     await app.init();
@@ -33,57 +42,52 @@ describe('AuthController', () => {
 
   beforeEach(() => {
     truncateAll();
-    sendMagicLink.mockClear();
+    mockGenerateAuthUrl.mockReset();
+    mockGetToken.mockReset();
+    mockVerifyIdToken.mockReset();
   });
 
-  describe('POST /api/auth/request-link', () => {
-    it('rejects a missing/invalid email', async () => {
-      const res = await request(app.getHttpServer()).post('/api/auth/request-link').send({});
-      expect(res.status).toBe(400);
-      expect(sendMagicLink).not.toHaveBeenCalled();
-    });
-
-    it('sends a magic link for a valid email', async () => {
-      const res = await request(app.getHttpServer()).post('/api/auth/request-link').send({ email: 'Person@Example.com' });
-      expect(res.status).toBe(200);
-      expect(res.body.ok).toBe(true);
-      expect(sendMagicLink).toHaveBeenCalledTimes(1);
-      const [to] = sendMagicLink.mock.calls[0];
-      expect(to).toBe('person@example.com'); // normalized
-    });
-
-    it('rate-limits repeated requests for the same email', async () => {
-      await request(app.getHttpServer()).post('/api/auth/request-link').send({ email: 'rate@example.com' });
-      await request(app.getHttpServer()).post('/api/auth/request-link').send({ email: 'rate@example.com' });
-      expect(sendMagicLink).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('GET /api/auth/verify', () => {
-    it('redirects to an error page for an invalid token', async () => {
-      const res = await request(app.getHttpServer()).get('/api/auth/verify').query({ token: 'bogus' });
+  describe('GET /api/auth/google', () => {
+    it('redirects to the Google consent URL', async () => {
+      mockGenerateAuthUrl.mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth?mock=1');
+      const res = await request(app.getHttpServer()).get('/api/auth/google');
       expect(res.status).toBe(302);
-      expect(res.headers.location).toBe(`${WEB_ORIGIN}/login?error=invalid_link`);
+      expect(res.headers.location).toBe('https://accounts.google.com/o/oauth2/v2/auth?mock=1');
+    });
+  });
+
+  describe('GET /api/auth/google/callback', () => {
+    it('redirects to the login error page for a failed exchange', async () => {
+      mockGetToken.mockRejectedValue(new Error('invalid_grant'));
+      const res = await request(app.getHttpServer()).get('/api/auth/google/callback').query({ code: 'bad-code' });
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe(`${WEB_ORIGIN}/login?error=oauth_failed`);
       expect(res.headers['set-cookie']).toBeUndefined();
     });
 
-    it('consumes a valid token, sets the auth cookie, and redirects home', async () => {
-      await request(app.getHttpServer()).post('/api/auth/request-link').send({ email: 'verify@example.com' });
-      const token = extractToken(sendMagicLink.mock.calls[0][1]);
+    it('redirects to the login error page for an unverified email', async () => {
+      mockGoogleUser('unverified@example.com', false);
+      const res = await request(app.getHttpServer()).get('/api/auth/google/callback').query({ code: 'some-code' });
+      expect(res.headers.location).toBe(`${WEB_ORIGIN}/login?error=oauth_failed`);
+    });
 
-      const res = await request(app.getHttpServer()).get('/api/auth/verify').query({ token });
+    it('creates a user, sets the auth cookie, and redirects home on success', async () => {
+      mockGoogleUser('Person@Example.com');
+      const res = await request(app.getHttpServer()).get('/api/auth/google/callback').query({ code: 'good-code' });
       expect(res.status).toBe(302);
       expect(res.headers.location).toBe(WEB_ORIGIN);
       expect(res.headers['set-cookie']?.[0]).toContain(`${AUTH_COOKIE}=`);
     });
 
-    it('rejects reusing an already-consumed token', async () => {
-      await request(app.getHttpServer()).post('/api/auth/request-link').send({ email: 'reuse@example.com' });
-      const token = extractToken(sendMagicLink.mock.calls[0][1]);
+    it('reuses the same user on a second login for the same email', async () => {
+      mockGoogleUser('repeat@example.com');
+      const first = await request(app.getHttpServer()).get('/api/auth/google/callback').query({ code: 'code-1' });
+      const firstMe = await request(app.getHttpServer()).get('/api/auth/me').set('Cookie', first.headers['set-cookie'][0]);
 
-      await request(app.getHttpServer()).get('/api/auth/verify').query({ token });
-      const second = await request(app.getHttpServer()).get('/api/auth/verify').query({ token });
-      expect(second.headers.location).toBe(`${WEB_ORIGIN}/login?error=invalid_link`);
+      const second = await request(app.getHttpServer()).get('/api/auth/google/callback').query({ code: 'code-2' });
+      const secondMe = await request(app.getHttpServer()).get('/api/auth/me').set('Cookie', second.headers['set-cookie'][0]);
+
+      expect(secondMe.body.id).toBe(firstMe.body.id);
     });
   });
 
@@ -94,10 +98,9 @@ describe('AuthController', () => {
     });
 
     it('returns the logged-in user for a valid session', async () => {
-      await request(app.getHttpServer()).post('/api/auth/request-link').send({ email: 'me@example.com' });
-      const token = extractToken(sendMagicLink.mock.calls[0][1]);
-      const verifyRes = await request(app.getHttpServer()).get('/api/auth/verify').query({ token });
-      const cookie = verifyRes.headers['set-cookie'][0];
+      mockGoogleUser('me@example.com');
+      const loginRes = await request(app.getHttpServer()).get('/api/auth/google/callback').query({ code: 'good-code' });
+      const cookie = loginRes.headers['set-cookie'][0];
 
       const res = await request(app.getHttpServer()).get('/api/auth/me').set('Cookie', cookie);
       expect(res.status).toBe(200);
@@ -112,6 +115,39 @@ describe('AuthController', () => {
       expect(res.status).toBe(200);
       expect(res.body.ok).toBe(true);
       expect(res.headers['set-cookie']?.[0]).toContain(`${AUTH_COOKIE}=;`);
+    });
+  });
+
+  describe('Google OAuth (AuthService)', () => {
+    let authService: AuthService;
+
+    beforeAll(() => {
+      authService = app.get(AuthService);
+    });
+
+    it('getGoogleAuthUrl builds a URL via the configured client', () => {
+      mockGenerateAuthUrl.mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth?mock=1');
+      const url = authService.getGoogleAuthUrl();
+      expect(url).toBe('https://accounts.google.com/o/oauth2/v2/auth?mock=1');
+      expect(mockGenerateAuthUrl).toHaveBeenCalledWith({ scope: ['openid', 'email'] });
+    });
+
+    it('handleGoogleCallback returns the verified email', async () => {
+      mockGoogleUser('Person@Example.com');
+      const result = await authService.handleGoogleCallback('mock-code');
+      expect(result.email).toBe('person@example.com');
+      expect(mockGetToken).toHaveBeenCalledWith('mock-code');
+      expect(mockVerifyIdToken).toHaveBeenCalledWith({ idToken: 'mock-id-token', audience: GOOGLE_CLIENT_ID });
+    });
+
+    it('handleGoogleCallback rejects an unverified email', async () => {
+      mockGoogleUser('unverified@example.com', false);
+      await expect(authService.handleGoogleCallback('mock-code')).rejects.toThrow('no verified email');
+    });
+
+    it('handleGoogleCallback rejects a missing id_token', async () => {
+      mockGetToken.mockResolvedValue({ tokens: {} });
+      await expect(authService.handleGoogleCallback('mock-code')).rejects.toThrow('did not return an id token');
     });
   });
 });

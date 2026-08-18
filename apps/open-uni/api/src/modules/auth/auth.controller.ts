@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, Req, Res, HttpCode, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Query, Req, Res, HttpCode, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AUTH_COOKIE, JwtAuthGuard } from '../../common/jwt-auth.guard';
@@ -16,21 +16,19 @@ const COOKIE_OPTIONS = {
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  @Post('request-link')
-  @HttpCode(200)
-  async requestLink(@Body('email') email: string, @Res() res: Response) {
-    await this.auth.requestLink(email || '');
-    res.json({ ok: true }); // same response whether or not the email exists — avoids account enumeration
+  @Get('google')
+  google(@Res() res: Response) {
+    res.redirect(this.auth.getGoogleAuthUrl());
   }
 
-  @Get('verify')
-  verify(@Query('token') token: string, @Res() res: Response) {
+  @Get('google/callback')
+  async googleCallback(@Query('code') code: string, @Res() res: Response) {
     try {
-      const { cookieValue, redirectTo } = this.auth.verify(token || '');
+      const { cookieValue, redirectTo } = await this.auth.loginWithGoogle(code || '');
       res.cookie(AUTH_COOKIE, cookieValue, COOKIE_OPTIONS);
       res.redirect(redirectTo);
     } catch {
-      res.redirect(`${WEB_ORIGIN}/login?error=invalid_link`);
+      res.redirect(`${WEB_ORIGIN}/login?error=oauth_failed`);
     }
   }
 

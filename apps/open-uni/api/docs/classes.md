@@ -7,7 +7,7 @@ CRUD for courses. Each class groups lectures and optionally links to an OPAL cou
 - Module: `ClassesModule`
 - Controller: `ClassesController` (`api/classes`)
 
-**Ownership:** every route except `opal-metadata` requires a valid `auth_token` session cookie (magic-link + JWT, see `docs/health.md`'s auth note and `src/modules/auth`). `POST /api/classes` stamps the class with `req.user.sub` as `userId`; every other route 404s if the logged-in user doesn't own the class (same response as a missing class, so ownership can't be probed). No cookie → 401. Real per-user accounts replaced the earlier anonymous `X-Device-Id` scoping — see `todo-features.md` at the repo root.
+**Ownership:** every route except `opal-metadata` requires a valid `auth_token` session cookie (Google OAuth + JWT, see `docs/health.md`'s auth note and `src/modules/auth`). `POST /api/classes` stamps the class with `req.user.sub` as `userId`; every other route 404s if the logged-in user doesn't own the class (same response as a missing class, so ownership can't be probed). No cookie → 401. Real per-user accounts replaced the earlier anonymous `X-Device-Id` scoping — see `todo-features.md` at the repo root.
 
 **OPAL credentials:** the server never stores an OPAL login. Any route that needs one (`opal-metadata`, `:classId/detect`) takes `opalUsername`/`opalPassword`/`opalId` in the request body, supplied per-request by the client (see `apps/open-uni/web/lib/credentials.ts` for the client-side encrypted store) and used in-memory only for the life of that request.
 

@@ -7,7 +7,6 @@ import { StorageModule } from '../storage/storage.module';
 import { DownloadModule } from '../download/download.module';
 import { SummarizeModule } from '../summarize/summarize.module';
 import { AuthModule } from '../auth/auth.module';
-import { EmailModule } from '../email/email.module';
 import { TRANSCRIBE_QUEUE } from '../queue/queue.constants';
 
 @Module({
@@ -16,7 +15,6 @@ import { TRANSCRIBE_QUEUE } from '../queue/queue.constants';
     DownloadModule,
     SummarizeModule,
     AuthModule,
-    EmailModule,
     BullModule.registerQueue({ name: TRANSCRIBE_QUEUE }),
   ],
   controllers: [LecturesController],

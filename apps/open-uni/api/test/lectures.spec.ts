@@ -9,7 +9,6 @@ import { LecturesController } from '../src/modules/lectures/lectures.controller'
 import { TranscribeProcessor } from '../src/modules/lectures/transcribe.processor';
 import { DownloadService } from '../src/modules/download/download.service';
 import { SummarizeService } from '../src/modules/summarize/summarize.service';
-import { EmailService } from '../src/modules/email/email.service';
 import { ClassesModule } from '../src/modules/classes/classes.module';
 import { StorageService } from '../src/modules/storage/storage.service';
 import { truncateAll, cleanClassesDir } from './helpers/db';
@@ -28,10 +27,6 @@ const mockSummarize = {
     mergeSummaries: jest.fn().mockResolvedValue('Mock summary content'),
   }),
   withAbort: jest.fn().mockImplementation((p: Promise<any>) => p),
-};
-
-const mockEmail = {
-  sendLectureSummary: jest.fn().mockResolvedValue(undefined),
 };
 
 const mockQueue = {
@@ -96,7 +91,6 @@ describe('LecturesController', () => {
     })
       .overrideProvider(DownloadService).useValue(mockDownload)
       .overrideProvider(SummarizeService).useValue(mockSummarize)
-      .overrideProvider(EmailService).useValue(mockEmail)
       .overrideProvider(getQueueToken(TRANSCRIBE_QUEUE)).useValue(mockQueue)
       // Real class carries the @Processor decorator's metadata, which makes
       // BullExplorer spin up a real BullMQ Worker (Redis connection) on
@@ -307,34 +301,6 @@ describe('LecturesController', () => {
 
       const statusRes = await get(`/api/classes/${classId}/lectures/${id}/status`);
       expect(statusRes.body.status).toBe('summarized');
-      expect(mockEmail.sendLectureSummary).not.toHaveBeenCalled();
-    });
-
-    it('sends a notification email when the toggle is on', async () => {
-      storage.setNotifyEmailEnabled(true);
-      storage.setNotifyEmail('me@example.com');
-
-      const created = await post(`/api/classes/${classId}/lectures`)
-        .send({ name: 'L', url: 'https://example.com' });
-      const id = created.body.id;
-
-      const dir = storage.lectureDirPath(classId, id);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(path.join(dir, 'transcript.txt'), 'Test transcript for summarization');
-
-      await post(`/api/classes/${classId}/lectures/${id}/summarize`)
-        .send({ geminiApiKey: 'test-gemini-key' })
-        .buffer(true)
-        .parse((response, callback) => {
-          let data = '';
-          response.on('data', (chunk: Buffer) => { data += chunk.toString(); });
-          response.on('end', () => callback(null, data));
-        });
-
-      expect(mockEmail.sendLectureSummary).toHaveBeenCalledWith(expect.objectContaining({
-        to: 'me@example.com',
-        summaryContent: 'Mock summary content',
-      }));
     });
 
     it('reverts status to transcribed with lastError when summarization throws', async () => {

@@ -32,12 +32,8 @@ Personal tool for automatically detecting, downloading, transcribing, and summar
   - API: [detect.md](../api/docs/detect.md)
   - Web: [settings.md](../web/docs/settings.md)
 
-- **Pipeline** — automated queue: detect → transcribe → summarize → email, cron-triggered
+- **Pipeline** — automated queue: detect → transcribe → summarize, cron-triggered
   - API: [pipeline.md](../api/docs/pipeline.md)
-
-- **Email notifications** — send summary email via Gmail on pipeline completion or on demand
-  - API: [email.md](../api/docs/email.md)
-  - Web: [settings.md](../web/docs/settings.md)
 
 - **Transcript search** — full-text search across transcripts within a class
   - API: [search.md](../api/docs/search.md)
