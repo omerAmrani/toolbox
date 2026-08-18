@@ -4,7 +4,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { chromium } from 'playwright';
 import { WhisperService } from '../whisper/whisper.service';
-import { TMP_DIR, WHISPER_CONCURRENCY } from '../../config';
+import { TMP_DIR, WHISPER_CONCURRENCY, DEBUG } from '../../config';
 import { OpalCredentials } from '../../credentials';
 
 const CONCURRENCY = parseInt(WHISPER_CONCURRENCY, 10);
@@ -75,7 +75,7 @@ export class DownloadService {
       await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
       log(`Video page URL: ${page.url()}`);
 
-      if (process.env.DEBUG) {
+      if (DEBUG) {
         writeFileSync('/tmp/openu-debug.html', await page.content(), 'utf-8');
         log('HTML saved to /tmp/openu-debug.html');
       }

@@ -2,7 +2,14 @@ import { mkdirSync } from 'fs';
 import path from 'path';
 import * as dotenv from 'dotenv';
 
-dotenv.config({ path: process.env.NODE_ENV === 'test' ? '.env.test' : '.env' });
+const envPath =
+  process.env.NODE_ENV === 'test'
+    ? '.env.test'
+    : process.env.NODE_ENV === 'production'
+      ? '/etc/secrets/.env'
+      : '.env';
+
+dotenv.config({ path: envPath });
 
 // OPAL/AI credentials are no longer read from here — they're per-user,
 // client-side encrypted, and sent per-request (see src/credentials.ts).
@@ -24,7 +31,12 @@ export const {
   REDIS_USERNAME,
   REDIS_PASSWORD,
   QUEUE_ENCRYPTION_KEY,
+  DATA_DIR,
+  DEBUG,
 } = process.env;
+
+export const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+export const IS_TEST = process.env.NODE_ENV === 'test';
 
 if (!JWT_SECRET && process.env.NODE_ENV !== 'test') {
   throw new Error('JWT_SECRET is required — set it in .env (e.g. `openssl rand -hex 32`)');

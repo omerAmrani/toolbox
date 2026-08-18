@@ -2,11 +2,11 @@ import Database, { Database as BetterDatabase } from 'better-sqlite3';
 import path from 'path';
 import { mkdirSync } from 'fs';
 import { getSettings } from '../settings';
+import { DATA_DIR as CONFIGURED_DATA_DIR, IS_TEST } from './config';
 
-const DEFAULT_DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, '..', '..', 'recorder-db');
+const DEFAULT_DATA_DIR = CONFIGURED_DATA_DIR || path.resolve(__dirname, '..', '..', 'recorder-db');
 const TEST_DATA_DIR = path.resolve(process.cwd(), 'temp-db');
-export const DATA_DIR: string =
-  process.env.NODE_ENV === 'test' ? TEST_DATA_DIR : (getSettings().dataDir || DEFAULT_DATA_DIR);
+export const DATA_DIR: string = IS_TEST ? TEST_DATA_DIR : (getSettings().dataDir || DEFAULT_DATA_DIR);
 export const CLASSES_DIR: string = path.join(DATA_DIR, 'classes');
 
 mkdirSync(DATA_DIR, { recursive: true });

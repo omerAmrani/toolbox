@@ -2,12 +2,12 @@ import { Controller, Post, Get, Body, Query, Req, Res, HttpCode, UseGuards } fro
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AUTH_COOKIE, JwtAuthGuard } from '../../common/jwt-auth.guard';
-import { WEB_ORIGIN } from '../../config';
+import { WEB_ORIGIN, IS_PRODUCTION } from '../../config';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
+  secure: IS_PRODUCTION,
   path: '/',
   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days, matches JwtModule signOptions.expiresIn
 };
