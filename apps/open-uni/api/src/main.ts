@@ -8,7 +8,7 @@ import { PORT, WEB_ORIGIN } from './config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.set('trust proxy', 1);
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
   const webOrigins = [WEB_ORIGIN, WEB_ORIGIN.replace('127.0.0.1', 'localhost'), WEB_ORIGIN.replace('localhost', '127.0.0.1')];
   app.enableCors({
     origin: [...new Set(webOrigins)],
