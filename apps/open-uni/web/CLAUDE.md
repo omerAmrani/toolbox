@@ -6,7 +6,7 @@ Next.js 15 App Router, port 3002. Calls NestJS directly — no API proxy layer.
 
 All fetches go through `lib/api.ts`:
 ```ts
-apiUrl('/api/classes') // → NEXT_PUBLIC_API_URL + path, default http://localhost:3001
+apiUrl('/api/classes') // → NEXT_PUBLIC_API_URL + path, default http://127.0.0.1:3001 (the local-mode API binds to 127.0.0.1 only)
 ```
 Never hardcode `localhost:3001` — always use `apiUrl()`.
 

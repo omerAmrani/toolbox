@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from 'fs';
 import os from 'os';
 import path from 'path';
 import { TranscribeProcessor, TranscribeJobData } from '../src/modules/lectures/transcribe.processor';
-import { encryptForQueue } from '../src/modules/queue/queue-crypto';
 
 let dir: string;
 beforeEach(() => { dir = mkdtempSync(path.join(os.tmpdir(), 'transcribe-processor-')); });
@@ -20,7 +19,8 @@ describe('TranscribeProcessor', () => {
     classId: 'c1',
     lectureId: 'l1',
     userId: 'user-a',
-    encryptedCredentials: encryptForQueue({ opalUsername: 'u', opalPassword: 'p', opalId: '1', groqApiKey: 'g' }),
+    opalCredentials: { username: 'u', password: 'p', id: '1' },
+    groqApiKey: 'g',
     maxDurationSecs: null,
   };
 
@@ -41,13 +41,13 @@ describe('TranscribeProcessor', () => {
     processor = new TranscribeProcessor(lecturesService as any, storage as any, download as any);
   });
 
-  it('decrypts credentials, runs the pipeline, and broadcasts done on success', async () => {
+  it('runs the pipeline with the given credentials, and broadcasts done on success', async () => {
     const events: any[] = [];
     bus.on('event', (e) => events.push(e));
     let ended = false;
     bus.on('end', () => { ended = true; });
 
-    await processor.process({ id: 'job-1', data: jobData } as any);
+    await processor.run(jobData);
 
     expect(download.extractVideoUrl).toHaveBeenCalledWith(
       'https://example.com/lecture',
@@ -56,7 +56,7 @@ describe('TranscribeProcessor', () => {
       expect.anything(),
     );
     expect(download.downloadAndTranscribe).toHaveBeenCalledWith(
-      'job-1', 'https://example.com/video.m3u8', 'g', expect.any(Function), null, expect.any(String), null, expect.anything(),
+      expect.any(String), 'https://example.com/video.m3u8', 'g', expect.any(Function), null, expect.any(String), null, expect.anything(),
     );
     expect(storage.updateLectureMeta).toHaveBeenCalledWith('c1', 'l1', { status: 'transcribed', whisperBackend: 'groq-whisper' });
     expect(events.find((e) => e.type === 'done')).toMatchObject({ status: 'transcribed' });
@@ -69,7 +69,7 @@ describe('TranscribeProcessor', () => {
     const events: any[] = [];
     bus.on('event', (e) => events.push(e));
 
-    await processor.process({ data: jobData } as any);
+    await processor.run(jobData);
 
     expect(storage.updateLectureMeta).toHaveBeenCalledWith('c1', 'l1', expect.objectContaining({
       status: 'pending',

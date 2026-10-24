@@ -7,7 +7,7 @@ import { Button } from '@/app/components/Button';
 import { Select } from '@/app/components/Select';
 import { SEMESTER_HE } from '@/lib/status';
 import {SEMESTER_ORDER, getSelectedSemester, setSelectedSemester} from '@/lib/selectedSemester';
-import { StoredCredentials, SecretKey, hasStoredCredentials, saveCredentials as saveCredentialsLocal, clearStoredCredentials, requireCredentials, getUnlocked, getPlainFields, getSecretFlags } from '@/lib/credentials';
+import { useConfigStatus, ConfigStatus } from '@/lib/configStatus';
 
 interface DataDirInfo {
   current: string;
@@ -54,30 +54,13 @@ const MODELS: { key: ModelKey; emoji: string; name: string; sub: string; role: s
   { key: 'claude', emoji: 'C', name: 'Claude', sub: 'Anthropic · claude-haiku-4-5-20251001', role: 'סיכומים' },
 ];
 
-type CredentialField = { key: keyof StoredCredentials; label: string; secret: boolean };
-
-// Right column (RTL) — OpenU login, plain ID/username + one secret password.
-const OPAL_FIELDS: CredentialField[] = [
-  { key: 'opalId', label: 'תעודת זהות', secret: false },
-  { key: 'opalUsername', label: 'שם משתמש', secret: false },
-  { key: 'opalPassword', label: 'סיסמה', secret: true },
+// Read-only: credentials live in the API's .env (docs/adr/0002).
+const ENV_KEYS: { label: string; keys: string; isSet: (s: ConfigStatus) => boolean }[] = [
+  { label: 'האוניברסיטה הפתוחה', keys: 'OPENU_USERNAME / OPENU_PASSWORD / OPENU_ID', isSet: (s) => s.opal },
+  { label: 'Groq (תמלול)', keys: 'GROQ_API_KEY', isSet: (s) => s.groq },
+  { label: 'Gemini (סיכום)', keys: 'GEMINI_API_KEY', isSet: (s) => s.gemini },
+  { label: 'Claude (סיכום)', keys: 'ANTHROPIC_API_KEY', isSet: (s) => s.claude },
 ];
-// Left column (RTL) — AI provider API keys, all secret.
-const API_KEY_FIELDS: CredentialField[] = [
-  { key: 'groqApiKey', label: 'Groq (תמלול)', secret: true },
-  { key: 'geminiApiKey', label: 'Gemini', secret: true },
-  { key: 'anthropicApiKey', label: 'Claude', secret: true },
-];
-const EMPTY_CREDENTIAL_DRAFT: StoredCredentials = {
-  opalUsername: '', opalId: '', opalPassword: '', groqApiKey: '', geminiApiKey: '', anthropicApiKey: '',
-};
-
-// Non-secret fields (username/ID) are stored unencrypted, so they always show
-// their real value; secret fields (password, API keys) never prefill — the
-// "already set" chip (driven by getSecretFlags()) is the only sign one has a value.
-function draftFromPlainFields(plain: { opalUsername: string; opalId: string }): StoredCredentials {
-  return { ...EMPTY_CREDENTIAL_DRAFT, opalUsername: plain.opalUsername, opalId: plain.opalId };
-}
 
 export default function SettingsPage() {
   const [dataDir, setDataDir] = useState<DataDirInfo | null>(null);
@@ -99,14 +82,7 @@ export default function SettingsPage() {
     claude: { status: 'idle', msg: 'לא נבדק' },
   });
 
-  const [credentialsStored, setCredentialsStored] = useState(false);
-  const [credentialDraft, setCredentialDraft] = useState<StoredCredentials>(EMPTY_CREDENTIAL_DRAFT);
-  const [secretFlags, setSecretFlags] = useState<Record<SecretKey, boolean>>({
-    opalPassword: false, groqApiKey: false, geminiApiKey: false, anthropicApiKey: false,
-  });
-  const [passphraseDraft, setPassphraseDraft] = useState('');
-  const [savingCredentials, setSavingCredentials] = useState(false);
-  const [credentialsMsg, setCredentialsMsg] = useState<{ msg: string; error?: boolean } | null>(null);
+  const configStatus = useConfigStatus();
 
   const loadDataDir = useCallback(async () => {
     try {
@@ -179,45 +155,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadDataDir();
-    setCredentialsStored(hasStoredCredentials());
-    setCredentialDraft(draftFromPlainFields(getPlainFields()));
-    setSecretFlags(getSecretFlags());
     initSyncPanel();
   }, [loadDataDir, initSyncPanel]);
-
-  const saveCredentials = async () => {
-    if (!passphraseDraft.trim()) { setCredentialsMsg({ msg: 'יש להזין סיסמת הצפנה', error: true }); return; }
-    setSavingCredentials(true);
-    setCredentialsMsg(null);
-    try {
-      // ponytail: a blank secret field means "leave as-is", not "clear it" — but
-      // that only works if we already have the old values in memory (unlocked
-      // this session). If the store was never unlocked, a blank field really
-      // does get saved blank; upgrade path is prompting to unlock before save.
-      const previouslyUnlocked = getUnlocked();
-      const toSave: StoredCredentials = { ...credentialDraft };
-      for (const key of ['opalPassword', 'groqApiKey', 'geminiApiKey', 'anthropicApiKey'] as SecretKey[]) {
-        if (!toSave[key] && previouslyUnlocked) toSave[key] = previouslyUnlocked[key];
-      }
-
-      await saveCredentialsLocal(passphraseDraft, toSave);
-      setCredentialsStored(true);
-      setCredentialDraft(draftFromPlainFields(getPlainFields()));
-      setSecretFlags(getSecretFlags());
-      setPassphraseDraft('');
-      setCredentialsMsg({ msg: 'הפרטים נשמרו' });
-    } catch { setCredentialsMsg({ msg: 'שגיאה בהצפנה', error: true }); }
-    finally { setSavingCredentials(false); }
-  };
-
-  const clearCredentials = () => {
-    if (!confirm('למחוק את פרטי הגישה השמורים בדפדפן זה?')) return;
-    clearStoredCredentials();
-    setCredentialsStored(false);
-    setCredentialDraft(EMPTY_CREDENTIAL_DRAFT);
-    setSecretFlags(getSecretFlags());
-    setCredentialsMsg({ msg: 'הפרטים נמחקו' });
-  };
 
   const pickDataDir = async () => {
     setPickingDir(true);
@@ -261,9 +200,8 @@ export default function SettingsPage() {
     setSyncing(true);
     setSyncProgress('מתחיל...');
     try {
-      const creds = await requireCredentials();
       const selected = semesterOptions.find((o) => o.key === selectedSemesterKey);
-      const body = { ...creds, ...(selected ? { semester: selected.semester, year: selected.year } : {}) };
+      const body = selected ? { semester: selected.semester, year: selected.year } : {};
       await streamSSE('/api/classes/sync', body, (ev) => {
         if (ev.type === 'progress') setSyncProgress(String(ev.message));
         else if (ev.type === 'class') {
@@ -280,14 +218,8 @@ export default function SettingsPage() {
   const testModel = async (key: ModelKey) => {
     setModels((m) => ({ ...m, [key]: { status: 'testing', msg: 'שולח בקשה...' } }));
     try {
-      const creds = await requireCredentials();
-      const apiKey = key === 'claude' ? creds.anthropicApiKey : creds.geminiApiKey;
       const data: { ok?: boolean; configured?: boolean; error?: string; ms?: number; response?: string } =
-        await fetch(apiUrl(`/health/${key}`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey }),
-        }).then((r) => r.json());
+        await fetch(apiUrl(`/health/${key}`), { method: 'POST' }).then((r) => r.json());
       if (!data.configured) {
         setModels((m) => ({ ...m, [key]: { status: 'warning', msg: data.error || 'מפתח API לא מוגדר' } }));
       } else if (data.ok) {
@@ -406,85 +338,30 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Credentials card */}
+        {/* Credentials card — read-only status of the API's .env */}
         <div className="set-card">
           <div className="set-card__h">
             <div>
               <div className="set-card__title">פרטי גישה</div>
               <div className="set-card__sub">
-                האוניברסיטה הפתוחה ומפתחות API — מוצפן בדפדפן זה בלבד, לא נשמר בשרת
-                {credentialsStored ? ' · שמור' : ''}
+                מוגדרים בקובץ <code>apps/open-uni/api/.env</code> — ערכו אותו והפעילו מחדש את השרת
               </div>
             </div>
           </div>
-
-          <div className="cred-grid">
-            <div className="cred-section">
-              <div className="cred-section__title">האוניברסיטה הפתוחה</div>
-              {OPAL_FIELDS.map(({ key, label, secret }) => (
-                <div key={key} className="cred-field">
-                  <div className="cred-field__label">
-                    {label}
-                    {secret && secretFlags[key as SecretKey] && (
-                      <span className="chip chip--accent"><span className="chip__dot" />מוגדר</span>
-                    )}
-                  </div>
-                  <input
-                    type={secret ? 'password' : 'text'}
-                    value={credentialDraft[key]}
-                    onChange={(e) => setCredentialDraft((d) => ({ ...d, [key]: e.target.value }))}
-                    className="text-field text-field--full"
-                  />
+          {ENV_KEYS.map(({ label, keys, isSet }) => {
+            const set = configStatus ? isSet(configStatus) : null;
+            return (
+              <div key={keys} className="cred-field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div className="cred-field__label">{label}</div>
+                  <div style={{ font: '0.78rem var(--font-mono)', color: 'var(--muted)' }}>{keys}</div>
                 </div>
-              ))}
-            </div>
-
-            <div className="cred-section">
-              <div className="cred-section__title">מפתחות API</div>
-              {API_KEY_FIELDS.map(({ key, label, secret }) => (
-                <div key={key} className="cred-field">
-                  <div className="cred-field__label">
-                    {label}
-                    {secret && secretFlags[key as SecretKey] && (
-                      <span className="chip chip--accent"><span className="chip__dot" />מוגדר</span>
-                    )}
-                  </div>
-                  <input
-                    type={secret ? 'password' : 'text'}
-                    value={credentialDraft[key]}
-                    onChange={(e) => setCredentialDraft((d) => ({ ...d, [key]: e.target.value }))}
-                    className="text-field text-field--full"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="cred-divider" />
-
-          <div className="cred-field">
-            <div className="cred-field__label">סיסמת הצפנה</div>
-            <input
-              type="password"
-              value={passphraseDraft}
-              onChange={(e) => setPassphraseDraft(e.target.value)}
-              placeholder="נדרשת כדי לפתוח את הפרטים בהמשך"
-              className="text-field text-field--full"
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-            <Button onClick={saveCredentials} disabled={savingCredentials}>
-              {savingCredentials ? 'שומר...' : 'שמור'}
-            </Button>
-            {credentialsStored && (
-              <Button variant="danger-ghost" onClick={clearCredentials}>מחק פרטים שמורים</Button>
-            )}
-            {credentialsMsg && (
-              <div style={{ fontSize: '0.82rem', color: credentialsMsg.error ? 'var(--danger)' : 'var(--good)' }}>
-                {credentialsMsg.msg}
+                <span>{set === null ? '—' : set ? '✅' : '❌'}</span>
               </div>
-            )}
+            );
+          })}
+          <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: 8 }}>
+            לתמלול נדרשים OPAL ו-Groq · לסיכום נדרש Gemini או Claude
           </div>
         </div>
 

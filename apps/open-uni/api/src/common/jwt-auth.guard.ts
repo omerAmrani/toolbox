@@ -1,7 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { IS_LOCAL_MODE } from '../config';
 
 export const AUTH_COOKIE = 'auth_token';
+
+// Local mode has no login: every request is this one fixed user (docs/adr/0002).
+export const LOCAL_USER = { sub: 'local', email: 'local' };
 
 function readCookie(req: any, name: string): string | undefined {
   if (req.cookies?.[name]) return req.cookies[name];
@@ -20,6 +24,10 @@ export class JwtAuthGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest();
+    if (IS_LOCAL_MODE) {
+      req.user = LOCAL_USER;
+      return true;
+    }
     const token = readCookie(req, AUTH_COOKIE);
     if (!token) throw new UnauthorizedException('Not logged in');
     try {

@@ -1,9 +1,7 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
+import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { existsSync, unlinkSync, writeFileSync } from 'fs';
 import path from 'path';
-import { TRANSCRIBE_QUEUE } from '../queue/queue.constants';
-import { decryptFromQueue } from '../queue/queue-crypto';
 import { LecturesService } from './lectures.service';
 import { StorageService } from '../storage/storage.service';
 import { DownloadService } from '../download/download.service';
@@ -14,46 +12,38 @@ export interface TranscribeJobData {
   classId: string;
   lectureId: string;
   userId: string;
-  encryptedCredentials: string; // decrypts to TranscribeCredentials
+  opalCredentials: OpalCredentials;
+  groqApiKey: string;
   maxDurationSecs: number | null;
 }
 
-interface TranscribeCredentials {
-  opalUsername: string;
-  opalPassword: string;
-  opalId: string;
-  groqApiKey: string;
-}
-
-// Runs in-process for now (monolith) — moves to a standalone worker later
-// by pointing this at the same Redis, no redesign (see todo-features.md).
-@Processor(TRANSCRIBE_QUEUE, { concurrency: 3 })
-export class TranscribeProcessor extends WorkerHost {
+// Runs in-process, started fire-and-forget by the controller. A job in flight
+// when the process stops is lost; resetStuckProcessing() reverts its status
+// on the next boot (see docs/adr/0001).
+// ponytail: no global concurrency cap, only the per-user job slot — add a
+// semaphore (or bring back a queue) if several users share one server.
+@Injectable()
+export class TranscribeProcessor {
   constructor(
     private readonly lecturesService: LecturesService,
     private readonly storage: StorageService,
     private readonly download: DownloadService,
-  ) {
-    super();
-  }
+  ) {}
 
-  async process(job: Job<TranscribeJobData>): Promise<void> {
-    const { classId, lectureId, userId, encryptedCredentials, maxDurationSecs } = job.data;
+  async run(data: TranscribeJobData): Promise<void> {
+    const { classId, lectureId, userId, opalCredentials, groqApiKey, maxDurationSecs } = data;
     const key = `${classId}/${lectureId}`;
     const activeJob = this.lecturesService.activeJobs.get(key);
     const bus = activeJob?.bus;
     const broadcast = (data: any) => { try { bus?.emit('event', data); } catch (_) {} };
     const controller = activeJob?.controllers.get('transcribe') ?? new AbortController();
 
-    const creds = decryptFromQueue<TranscribeCredentials>(encryptedCredentials);
-    const opalCredentials: OpalCredentials = { username: creds.opalUsername, password: creds.opalPassword, id: creds.opalId };
-
-    const lecture = this.storage.getLecture(classId, lectureId);
-    const dir = this.storage.lectureDirPath(classId, lectureId);
-    const transcriptPath = path.join(dir, 'transcript.txt');
-    const mp3Path = path.join(dir, 'audio.mp3');
-
     try {
+      const lecture = this.storage.getLecture(classId, lectureId);
+      const dir = this.storage.lectureDirPath(classId, lectureId);
+      const transcriptPath = path.join(dir, 'transcript.txt');
+      const mp3Path = path.join(dir, 'audio.mp3');
+
       broadcast({ type: 'progress', step: 'login', message: 'מתחבר לאוניברסיטה הפתוחה...' });
       const videoUrl = await this.download.extractVideoUrl(
         lecture!.url,
@@ -64,9 +54,9 @@ export class TranscribeProcessor extends WorkerHost {
 
       broadcast({ type: 'progress', step: 'download', message: 'מוריד ומתמלל...' });
       const transcript = await this.download.downloadAndTranscribe(
-        String(job.id),
+        randomUUID(),
         videoUrl,
-        creds.groqApiKey,
+        groqApiKey,
         (msg: string) => broadcast({ type: 'progress', step: 'transcribe', message: msg }),
         null,
         mp3Path,

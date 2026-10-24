@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Query, Req, Res, UseGuards } from '@nestjs
 import { Request, Response } from 'express';
 import { StorageService } from '../storage/storage.service';
 import { DetectService } from '../detect/detect.service';
-import { OpalCredentials } from '../../credentials';
+import { getOpalCredentials, MISSING_CREDENTIALS } from '../../credentials';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { tryAcquireJobSlot, releaseJobSlot } from '../../job-guard';
@@ -43,13 +43,12 @@ export class PipelineController {
   }
 
   // Bulk "check for new lectures" across every one of the caller's classes —
-  // manual, credentials supplied per-request (see docs/pipeline.md).
+  // manual, OPAL credentials from the API's .env (see docs/pipeline.md).
   @Post('sync')
   async sync(@CurrentUser() userId: string, @Req() req: Request, @Res() res: Response) {
-    const { semester, year, opalUsername, opalPassword, opalId } = req.body as
-      { semester?: string; year?: number; opalUsername?: string; opalPassword?: string; opalId?: string };
-    if (!opalUsername || !opalPassword || !opalId) return res.status(400).json({ error: 'OPAL credentials required' });
-    const credentials: OpalCredentials = { username: opalUsername, password: opalPassword, id: opalId };
+    const { semester, year } = req.body as { semester?: string; year?: number };
+    const credentials = getOpalCredentials();
+    if (!credentials) return res.status(400).json({ error: MISSING_CREDENTIALS.opal });
 
     if (!tryAcquireJobSlot(userId)) {
       return res.status(429).json({ error: 'כבר יש עבודה פעילה אחת בתהליך. המתן לסיומה.' });

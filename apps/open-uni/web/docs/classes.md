@@ -23,6 +23,7 @@
 - Timeline layout (`.timeline` / `.tl-item` / `.lec-card`) — no table view, no layout toggle
 - Lecture number derived from chronological order within the class
 - Per-lecture actions depend on status: summarize, retry (on failure), skip, archive (UI-stub), delete; whole row is clickable → lecture detail
+- "▶ הפעל" (pending) runs transcribe then summarize; it's disabled with a hint tooltip when OPAL/Groq keys are missing, and runs transcribe-only when no Gemini/Claude key is confirmed (`GET /api/config/status`, `lib/configStatus.ts`). "▶ סכם" is disabled when no summarize key is set
 - Lectures in `transcribing / summarizing / processing` are highlighted as current
 - Polls `GET .../lectures` every 5 seconds for lectures not actively running locally
 - Class header: name, semester+year, code, total/summarized counts, edit (✎) and delete actions

@@ -5,15 +5,13 @@ Personal monorepo for my tools.
 
 ### open-uni-recorder
 
-Automatically detects new lectures from the OPAL platform, downloads and transcribes them, generates summaries, and optionally emails you the result.
+Detects new lectures on the Open University's OPAL platform, downloads and transcribes them, and generates summaries. Runs locally on your machine — no account, no login.
 
 **Features**
-- Detects new lectures from OPAL (Playwright, headless)
-- Downloads lecture video and transcribes via Groq Whisper or local whisper.cpp
-- Summarizes transcripts via Gemini, Groq, Claude, or Ollama
-- Q&A generation from summaries (Claude)
-- Email notifications on detection and completion
-- Cron: runs automatically every Thursday + Friday at 10:00 AM
+- Detects new lectures from OPAL (Playwright, headless) — manual "check now" per class or for all classes
+- Downloads lecture video and transcribes via Groq Whisper
+- Summarizes transcripts via Gemini or Claude
+- Versioned summaries per lecture
 
 **Stack:** NestJS API (port 3001) + Next.js 15 web UI (port 3002), SQLite, no ORM
 
@@ -21,30 +19,21 @@ Automatically detects new lectures from the OPAL platform, downloads and transcr
 
 - Node.js 20+
 - pnpm (`npm i -g pnpm`)
-- ffmpeg (required for audio extraction: `brew install ffmpeg`)
-- A [Groq](https://console.groq.com) API key (required — used for transcription and summarization)
-- Gemini, Anthropic, or Ollama API key (optional — alternative summarization backends)
+- ffmpeg (`brew install ffmpeg`)
+- A [Groq](https://console.groq.com) API key (free tier) — for transcription
+- A Gemini or Anthropic API key — for summaries (optional if you only want transcripts)
 
 ## Setup
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Install Playwright (for lecture detection)
-pnpm --filter @toolbox/open-uni-recorder-api exec playwright install chromium
-
-# Configure environment
+pnpm install                # also installs Playwright's Chromium
 cp apps/open-uni/api/.env.example apps/open-uni/api/.env
-cp apps/open-uni/web/.env.example apps/open-uni/web/.env
-# Fill in your credentials and API keys in both .env files
-
-# Start both apps
-turbo dev
+# fill in OPENU_USERNAME / OPENU_PASSWORD / OPENU_ID, GROQ_API_KEY,
+# and GEMINI_API_KEY or ANTHROPIC_API_KEY
+pnpm dev:open-uni
 ```
 
-Web UI: http://localhost:3002  
-API: http://localhost:3001
+Open http://127.0.0.1:3002. The settings page shows which keys the app found; transcribe/summarize buttons stay disabled until their keys are set.
 
 ## Structure
 

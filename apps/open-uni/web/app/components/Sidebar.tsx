@@ -22,6 +22,7 @@ export default function Sidebar() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
+  const [localMode, setLocalMode] = useState(false);
 
   const loadClasses = () => {
     apiFetch('/api/classes')
@@ -34,7 +35,10 @@ export default function Sidebar() {
     loadClasses();
     apiFetch('/api/auth/me')
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setEmail(data?.email ?? null))
+      .then((data) => {
+        setEmail(data?.email ?? null);
+        setLocalMode(!!data?.local);
+      })
       .catch(() => {});
   }, []);
 
@@ -123,14 +127,17 @@ export default function Sidebar() {
           );
         })}
       </div>
-      <button type="button" className="sb__me" onClick={logout} title="התנתקות">
-        <div className="sb__avatar">{email?.[0]?.toUpperCase() || '?'}</div>
-        <div className="sb__metxt">
-          {email || '—'}
-          <br />
-          <small>התנתקות</small>
-        </div>
-      </button>
+      {/* Local mode has no login, so nothing to log out of (docs/adr/0002). */}
+      {!localMode && (
+        <button type="button" className="sb__me" onClick={logout} title="התנתקות">
+          <div className="sb__avatar">{email?.[0]?.toUpperCase() || '?'}</div>
+          <div className="sb__metxt">
+            {email || '—'}
+            <br />
+            <small>התנתקות</small>
+          </div>
+        </button>
+      )}
 
       <NewCourseModal
         open={modalOpen}

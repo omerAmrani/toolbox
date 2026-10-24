@@ -4,7 +4,7 @@ dotenv.config();
 
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { PORT, WEB_ORIGIN } from './config';
+import { PORT, WEB_ORIGIN, IS_LOCAL_MODE } from './config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,10 +24,11 @@ async function bootstrap() {
     next();
   });
 
-  const port = PORT;
-  await app.listen(port, '0.0.0.0');
-  console.log(`\n🔧  Open University API`);
-  console.log(`🌐  Listening on 0.0.0.0:${port}\n`);
+  // Local mode has no login, so never expose it beyond this machine.
+  const host = IS_LOCAL_MODE ? '127.0.0.1' : '0.0.0.0';
+  await app.listen(PORT, host);
+  console.log(`\n🔧  Open University API${IS_LOCAL_MODE ? ' (local mode)' : ''}`);
+  console.log(`🌐  Listening on ${host}:${PORT}\n`);
 }
 
 bootstrap();

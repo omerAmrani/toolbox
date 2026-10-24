@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { apiFetch, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { streamSSE } from '@/lib/sse';
-import { requireCredentials } from '@/lib/credentials';
+import { useConfigStatus, missingFor } from '@/lib/configStatus';
 import { useToast } from '@/app/components/Toast';
 import { Status, fmtDateLong } from '@/app/components/Status';
 import { getClassColor, classIcon } from '@/lib/classMeta';
@@ -42,6 +42,9 @@ export default function ClassDetailPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [lectures, setLectures] = useState<Lecture[] | null>(null);
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
+  const configStatus = useConfigStatus();
+  const transcribeHint = missingFor(configStatus, 'transcribe');
+  const summarizeHint = missingFor(configStatus, 'summarize');
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const loadClass = useCallback(async () => {
@@ -125,18 +128,22 @@ export default function ClassDetailPage() {
   const runPipeline = async (lectureId: string) => {
     setRunningIds((s) => new Set(s).add(lectureId));
     try {
-      const creds = await requireCredentials();
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-        creds,
+        {},
         (ev) => {
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
         },
       );
+      // Transcribe-only unless the API confirmed a summarize key.
+      if (!configStatus || summarizeHint) {
+        showToast('התמלול הושלם');
+        return;
+      }
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-        creds,
+        {},
         (ev) => {
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
@@ -160,10 +167,9 @@ export default function ClassDetailPage() {
   const runSummarize = async (lectureId: string) => {
     setRunningIds((s) => new Set(s).add(lectureId));
     try {
-      const creds = await requireCredentials();
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-        creds,
+        {},
         (ev) => {
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
@@ -282,13 +288,14 @@ export default function ClassDetailPage() {
                       <Button
                         data-testid="run-pipeline-btn"
                         onClick={() => runPipeline(l.id)}
-                        title="הפעל pipeline"
+                        disabled={!!transcribeHint}
+                        title={transcribeHint ?? 'הפעל pipeline'}
                       >
                         ▶ הפעל
                       </Button>
                     )}
                     {l.status === 'transcribed' && (
-                      <Button onClick={() => runSummarize(l.id)} title="סכם">
+                      <Button onClick={() => runSummarize(l.id)} disabled={!!summarizeHint} title={summarizeHint ?? 'סכם'}>
                         ▶ סכם
                       </Button>
                     )}

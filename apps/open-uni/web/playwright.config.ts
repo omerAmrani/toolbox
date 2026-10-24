@@ -18,7 +18,8 @@ export default defineConfig({
       timeout: 15_000,
     },
     {
-      command: 'pnpm dev',
+      // Specs mock routes on localhost:3001 — pin it regardless of the lib/api.ts default.
+      command: 'NEXT_PUBLIC_API_URL=http://localhost:3001 pnpm dev',
       url: 'http://localhost:3002',
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,

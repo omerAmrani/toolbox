@@ -11,8 +11,8 @@ const envPath =
 
 dotenv.config({ path: envPath });
 
-// OPAL/AI credentials are no longer read from here — they're per-user,
-// client-side encrypted, and sent per-request (see src/credentials.ts).
+// OPAL/AI credentials are read from here in local mode and checked per
+// feature at call time (see src/credentials.ts, docs/adr/0002).
 
 export const {
   WHISPER_PROMPT = 'הרצאה אקדמית. עשוי להכיל מונחים טכניים באנגלית.',
@@ -26,11 +26,12 @@ export const {
   WEB_ORIGIN = 'http://127.0.0.1:3002',
   API_ORIGIN = `http://127.0.0.1:${process.env.PORT || '3001'}`,
   JWT_SECRET,
-  REDIS_HOST = '127.0.0.1',
-  REDIS_PORT = '6379',
-  REDIS_USERNAME,
-  REDIS_PASSWORD,
-  QUEUE_ENCRYPTION_KEY,
+  OPENU_USERNAME,
+  OPENU_PASSWORD,
+  OPENU_ID,
+  GROQ_API_KEY,
+  GEMINI_API_KEY,
+  ANTHROPIC_API_KEY,
   DATA_DIR,
   DEBUG,
 } = process.env;
@@ -40,16 +41,13 @@ export const GOOGLE_REDIRECT_URI = `${API_ORIGIN}/api/auth/google/callback`;
 export const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 export const IS_TEST = process.env.NODE_ENV === 'test';
 
-if (!JWT_SECRET && process.env.NODE_ENV !== 'test') {
-  throw new Error('JWT_SECRET is required — set it in .env (e.g. `openssl rand -hex 32`)');
-}
+// Local mode (no Google OAuth configured): no login, one fixed local user,
+// API bound to 127.0.0.1 only — see docs/adr/0002.
+export const IS_LOCAL_MODE = !GOOGLE_CLIENT_ID;
 
-// Encrypts credentials at rest in Redis while they sit in a queued job — see
-// queue.crypto.ts. Protects against a Redis-only compromise (leaked backup,
-// exposed instance); does not protect against the API/worker server itself
-// being compromised, since it holds this same key.
-if (!QUEUE_ENCRYPTION_KEY && process.env.NODE_ENV !== 'test') {
-  throw new Error('QUEUE_ENCRYPTION_KEY is required — set it in .env (e.g. `openssl rand -base64 32`)');
+// Only Google mode signs JWTs; local mode never touches them.
+if (!IS_LOCAL_MODE && !JWT_SECRET && !IS_TEST) {
+  throw new Error('JWT_SECRET is required when Google login is enabled — set it in .env (e.g. `openssl rand -hex 32`)');
 }
 
 export const MERGE_MAX_TOKENS = 16384;

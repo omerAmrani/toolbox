@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import * as config from '../src/config';
 import { ClassesModule } from '../src/modules/classes/classes.module';
 import { DetectService } from '../src/modules/detect/detect.service';
 import { truncateAll } from './helpers/db';
@@ -8,7 +9,6 @@ import { authCookie } from './helpers/auth';
 
 const USER_A = 'user-a';
 const USER_B = 'user-b';
-const OPAL_CREDS = { opalUsername: 'u', opalPassword: 'p', opalId: 'id' };
 
 describe('ClassesController', () => {
   let app: INestApplication;
@@ -127,16 +127,18 @@ describe('ClassesController', () => {
       expect(res.body.error).toBeDefined();
     });
 
-    it('returns 400 when OPAL credentials are missing', async () => {
+    it('returns 400 when OPAL credentials are missing from .env', async () => {
+      const replaced = jest.replaceProperty(config, 'OPENU_USERNAME', undefined);
       const res = await post('/api/classes/opal-metadata').send({ opalCourseUrl: 'https://opal.example.com/course/1' });
+      replaced.restore();
       expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
+      expect(res.body.error).toContain('OPENU_USERNAME');
     });
   });
 
   describe('POST /api/classes/:classId/detect', () => {
     it('returns 404 for unknown classId', async () => {
-      const res = await post('/api/classes/nonexistent/detect').send(OPAL_CREDS);
+      const res = await post('/api/classes/nonexistent/detect').send();
       expect(res.status).toBe(404);
       expect(detectNewLectures).not.toHaveBeenCalled();
     });
@@ -144,7 +146,7 @@ describe('ClassesController', () => {
     it('returns 404 when another user owns the class', async () => {
       const created = await post('/api/classes', USER_A).send({ name: 'Bio' });
 
-      const res = await post(`/api/classes/${created.body.id}/detect`, USER_B).send(OPAL_CREDS);
+      const res = await post(`/api/classes/${created.body.id}/detect`, USER_B).send();
       expect(res.status).toBe(404);
       expect(detectNewLectures).not.toHaveBeenCalled();
     });
@@ -152,9 +154,11 @@ describe('ClassesController', () => {
     it('returns 400 when OPAL credentials are missing', async () => {
       const created = await post('/api/classes').send({ name: 'Bio' });
 
-      const res = await post(`/api/classes/${created.body.id}/detect`).send({});
+      const replaced = jest.replaceProperty(config, 'OPENU_ID', undefined);
+      const res = await post(`/api/classes/${created.body.id}/detect`).send();
+      replaced.restore();
       expect(res.status).toBe(400);
-      expect(res.body.error).toBeDefined();
+      expect(res.body.error).toContain('OPENU_ID');
       expect(detectNewLectures).not.toHaveBeenCalled();
     });
 
@@ -164,11 +168,11 @@ describe('ClassesController', () => {
         { name: 'Lecture 1', url: 'https://opal.example.com/v/1', lectureDate: '2026-01-01' },
       ]);
 
-      const res = await post(`/api/classes/${created.body.id}/detect`).send(OPAL_CREDS);
+      const res = await post(`/api/classes/${created.body.id}/detect`).send();
       expect(res.status).toBe(201);
       expect(res.body.newLectures).toHaveLength(1);
       expect(res.body.newLectures[0]).toMatchObject({ name: 'Lecture 1', url: 'https://opal.example.com/v/1' });
-      expect(detectNewLectures).toHaveBeenCalledWith(created.body.id, { username: 'u', password: 'p', id: 'id' });
+      expect(detectNewLectures).toHaveBeenCalledWith(created.body.id, { username: 'test-user', password: 'test-pass', id: '123' });
 
       const list = await get('/api/classes');
       expect(list.body.find((c: any) => c.id === created.body.id).lectureCount).toBe(1);
@@ -178,7 +182,7 @@ describe('ClassesController', () => {
       const created = await post('/api/classes').send({ name: 'Bio' });
       detectNewLectures.mockResolvedValue([]);
 
-      const res = await post(`/api/classes/${created.body.id}/detect`).send(OPAL_CREDS);
+      const res = await post(`/api/classes/${created.body.id}/detect`).send();
       expect(res.status).toBe(201);
       expect(res.body.newLectures).toEqual([]);
     });
@@ -187,7 +191,7 @@ describe('ClassesController', () => {
       const created = await post('/api/classes').send({ name: 'Bio' });
       detectNewLectures.mockRejectedValue(new Error('OPAL login failed'));
 
-      const res = await post(`/api/classes/${created.body.id}/detect`).send(OPAL_CREDS);
+      const res = await post(`/api/classes/${created.body.id}/detect`).send();
       expect(res.status).toBe(502);
       expect(res.body.error).toBe('OPAL login failed');
     });

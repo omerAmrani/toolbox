@@ -26,14 +26,15 @@ There is no `skipped` status — every lecture created (manually or via sync/cro
 
 **Transcribe (SSE):** `POST .../transcribe`
 - login to OPAL → extract video URL → download + ffmpeg → whisper → save `transcript.txt`
-- Body: `{ opalUsername, opalPassword, opalId, groqApiKey }` required (400 if missing) — no server-side credential fallback, the client supplies its own per-request (see `docs/classes.md`'s OPAL credentials note)
+- Needs `OPENU_USERNAME`/`OPENU_PASSWORD`/`OPENU_ID` + `GROQ_API_KEY` in the API's `.env` — `400` naming the missing keys otherwise (see `src/credentials.ts`, docs/adr/0002)
+- Runs in-process (`TranscribeProcessor.run`, fire-and-forget from the controller) — no queue/Redis. A job in flight when the API stops is lost; `resetStuckProcessing()` reverts it to `pending` on the next boot (docs/adr/0001)
 - Body: `{ test: true }` caps download at 30 min
 - A second client connecting to an in-progress job attaches to the existing bus (no duplicate job)
 - Per-user concurrency cap: a user can only have one active transcribe/detect/sync job at a time (across all classes/lectures) — a second one returns `429` (`src/job-guard.ts`). This is separate from the "attach to existing bus" case above, which is a reconnect to the *same* job, not a second one.
 
 **Summarize (SSE):** `POST .../summarize`
 - reads `transcript.txt` → summarizes via backend → saves versioned summary → sets as current
-- Body: `{ backend: 'gemini' | 'claude' }` overrides config default; `{ geminiApiKey }` or `{ anthropicApiKey }` required to match whichever backend is used (400 if missing)
+- Body: optional `{ backend: 'gemini' | 'claude' }`. Uses the first backend with a key in `.env`: requested → `SUMMARIZE_BACKEND` → gemini → claude. `400` if neither `GEMINI_API_KEY` nor `ANTHROPIC_API_KEY` is set
 
 **SSE event shapes:**
 - `{ type: 'progress', step, message }`

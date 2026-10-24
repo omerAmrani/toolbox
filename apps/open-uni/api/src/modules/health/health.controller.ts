@@ -1,8 +1,8 @@
-import { Controller, Get, Post, Body, Res, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Res, HttpCode } from '@nestjs/common';
 import { Response } from 'express';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL, CLAUDE_MODEL } from '../../config';
+import { GEMINI_MODEL, CLAUDE_MODEL, GEMINI_API_KEY, ANTHROPIC_API_KEY } from '../../config';
 
 interface HealthCheckResult {
   ok: boolean;
@@ -12,17 +12,15 @@ interface HealthCheckResult {
   ms?: number;
 }
 
-// Credential-dependent checks (Gemini/Claude/OpenU/email) used to read from
-// server-side settings.json — that store is gone now that credentials are
-// per-user and client-side only. The settings page sends the key it holds
-// locally with each check instead (see docs/health.md).
+// Model checks use the keys from the API's .env (local mode, see
+// docs/adr/0002 and docs/health.md).
 @Controller('health')
 export class HealthController {
   private async check(
     apiKey: string | undefined,
     run: (apiKey: string) => Promise<{ response: string }>,
   ): Promise<HealthCheckResult> {
-    if (!apiKey) return { ok: false, configured: false, error: 'API key not provided' };
+    if (!apiKey) return { ok: false, configured: false, error: 'API key not set in apps/open-uni/api/.env' };
     try {
       const t0 = Date.now();
       const { response } = await run(apiKey);
@@ -39,8 +37,8 @@ export class HealthController {
 
   @Post('gemini')
   @HttpCode(200)
-  async checkGemini(@Body('apiKey') apiKey: string, @Res() res: Response) {
-    res.json(await this.check(apiKey, async (key) => {
+  async checkGemini(@Res() res: Response) {
+    res.json(await this.check(GEMINI_API_KEY, async (key) => {
       const model = new GoogleGenerativeAI(key).getGenerativeModel({ model: GEMINI_MODEL! });
       const result = await model.generateContent('Reply with just the word "ok".');
       return { response: result.response.text().trim() };
@@ -49,8 +47,8 @@ export class HealthController {
 
   @Post('claude')
   @HttpCode(200)
-  async checkClaude(@Body('apiKey') apiKey: string, @Res() res: Response) {
-    res.json(await this.check(apiKey, async (key) => {
+  async checkClaude(@Res() res: Response) {
+    res.json(await this.check(ANTHROPIC_API_KEY, async (key) => {
       const client = new Anthropic({ apiKey: key });
       const response = await client.messages.create({
         model: CLAUDE_MODEL!,

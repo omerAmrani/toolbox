@@ -14,7 +14,7 @@ Generates an AI summary from a lecture transcript. Supports multiple backends an
 4. Saves result as a new versioned file; sets it as `currentSummary`
 5. Sets lecture status: `summarizing` → `summarized`
 
-**Backends** (set via `SUMMARIZE_BACKEND`, overridable per-request with `{ backend }`):
+**Backends** (set via `SUMMARIZE_BACKEND`, overridable per-request with `{ backend }`; if the chosen backend has no key, the other configured one is used):
 - `gemini` — Google Gemini 2.5 Flash (requires `GEMINI_API_KEY`) — **default**
 - `claude` — Anthropic Claude (`claude-haiku-4-5-20251001`, requires `ANTHROPIC_API_KEY`); ~$0.0008 per summary
 

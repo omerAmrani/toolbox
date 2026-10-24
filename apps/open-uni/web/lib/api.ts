@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+// 127.0.0.1, not localhost: the local-mode API binds to 127.0.0.1 only, and
+// localhost may resolve to ::1 first.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3001';
 
 export function apiUrl(path: string): string {
   return `${API_URL}${path}`;

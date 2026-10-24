@@ -5,6 +5,7 @@ import { AuthModule } from '../src/modules/auth/auth.module';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { AUTH_COOKIE } from '../src/common/jwt-auth.guard';
 import { WEB_ORIGIN, GOOGLE_CLIENT_ID } from '../src/config';
+import * as config from '../src/config';
 import { truncateAll } from './helpers/db';
 
 const mockGetToken = jest.fn();
@@ -106,6 +107,17 @@ describe('AuthController', () => {
       expect(res.status).toBe(200);
       expect(res.body.email).toBe('me@example.com');
       expect(res.body.id).toBeDefined();
+    });
+  });
+
+  describe('local mode (no GOOGLE_CLIENT_ID)', () => {
+    it('treats a request without a session cookie as the fixed local user', async () => {
+      const localMode = jest.replaceProperty(config, 'IS_LOCAL_MODE', true);
+      const res = await request(app.getHttpServer()).get('/api/auth/me');
+      localMode.restore();
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ id: 'local', email: 'local', local: true });
     });
   });
 

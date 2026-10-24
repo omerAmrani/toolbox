@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { apiFetch } from '@/lib/api';
-import { requireCredentials } from '@/lib/credentials';
 import { Button } from '@/app/components/Button';
 import { Select } from '@/app/components/Select';
 
@@ -99,12 +98,10 @@ export default function NewCourseModal({ open, onClose, onCreated, editTarget }:
     lastDetectedUrl.current = trimmed;
     setDetecting(true);
     try {
-      const creds = await requireCredentials().catch(() => null);
-      if (!creds) { setShowFallback(true); return; }
       const r = await apiFetch('/api/classes/opal-metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ opalCourseUrl: trimmed, ...creds }),
+        body: JSON.stringify({ opalCourseUrl: trimmed }),
       });
       if (!r.ok) {
         setShowFallback(true);

@@ -2,16 +2,10 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, Res, UseGuards } fro
 import { Response } from 'express';
 import { StorageService } from '../storage/storage.service';
 import { DetectService } from '../detect/detect.service';
-import { OpalCredentials } from '../../credentials';
+import { getOpalCredentials, MISSING_CREDENTIALS } from '../../credentials';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { JwtAuthGuard } from '../../common/jwt-auth.guard';
 import { tryAcquireJobSlot, releaseJobSlot } from '../../job-guard';
-
-function opalCredentialsFromBody(body: any): OpalCredentials | null {
-  const { opalUsername, opalPassword, opalId } = body || {};
-  if (!opalUsername || !opalPassword || !opalId) return null;
-  return { username: opalUsername, password: opalPassword, id: opalId };
-}
 
 @Controller('api/classes')
 @UseGuards(JwtAuthGuard)
@@ -31,8 +25,8 @@ export class ClassesController {
   async extractOpalMetadata(@Body() body: any, @Res() res: Response) {
     const { opalCourseUrl } = body;
     if (!opalCourseUrl) return res.status(400).json({ error: 'opalCourseUrl required' });
-    const credentials = opalCredentialsFromBody(body);
-    if (!credentials) return res.status(400).json({ error: 'OPAL credentials required' });
+    const credentials = getOpalCredentials();
+    if (!credentials) return res.status(400).json({ error: MISSING_CREDENTIALS.opal });
     try {
       res.json(await this.detect.extractCourseMeta(opalCourseUrl, credentials));
     } catch (e: any) {
@@ -40,13 +34,12 @@ export class ClassesController {
     }
   }
 
-  // Manual "check for new lectures" trigger — replaces the old unattended
-  // cron, which can't work with per-user client-side-only credentials.
+  // Manual "check for new lectures" trigger.
   @Post(':classId/detect')
-  async detectNewLectures(@CurrentUser() userId: string, @Param('classId') classId: string, @Body() body: any, @Res() res: Response) {
+  async detectNewLectures(@CurrentUser() userId: string, @Param('classId') classId: string, @Res() res: Response) {
     if (!this.storage.getClassForUser(classId, userId)) return res.status(404).json({ error: 'Not found' });
-    const credentials = opalCredentialsFromBody(body);
-    if (!credentials) return res.status(400).json({ error: 'OPAL credentials required' });
+    const credentials = getOpalCredentials();
+    if (!credentials) return res.status(400).json({ error: MISSING_CREDENTIALS.opal });
     if (!tryAcquireJobSlot(userId)) {
       return res.status(429).json({ error: 'כבר יש עבודה פעילה אחת בתהליך. המתן לסיומה.' });
     }

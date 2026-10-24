@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import * as config from '../src/config';
 import { PipelineModule } from '../src/modules/pipeline/pipeline.module';
 import { ClassesModule } from '../src/modules/classes/classes.module';
 import { DetectService } from '../src/modules/detect/detect.service';
@@ -11,7 +12,6 @@ import { truncateAll, cleanClassesDir } from './helpers/db';
 import { authCookie } from './helpers/auth';
 
 const USER = 'test-user';
-const OPAL_CREDS = { opalUsername: 'u', opalPassword: 'p', opalId: '1' };
 
 const mockDetect = {
   detectNewLectures: jest.fn().mockResolvedValue([]),
@@ -108,11 +108,18 @@ describe('PipelineController', () => {
   });
 
   describe('POST /api/classes/sync (SSE)', () => {
+    it('returns 400 naming the missing keys when OPAL credentials are not in .env', async () => {
+      const replaced = jest.replaceProperty(config, 'OPENU_PASSWORD', undefined);
+      const res = await post('/api/classes/sync').send({});
+      replaced.restore();
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('OPENU_PASSWORD');
+    });
+
     it('sends done event immediately when no classes have opalCourseUrl', async () => {
       storage.createClass({ name: 'No URL Class', semester: 'A', year: 2025 }, USER);
 
       const res = await post('/api/classes/sync')
-        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -131,7 +138,6 @@ describe('PipelineController', () => {
       storage.updateClassMeta(cls.id, { opalCourseUrl: 'https://opal.example.com/course/1' });
 
       const res = await post('/api/classes/sync')
-        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -143,7 +149,7 @@ describe('PipelineController', () => {
       const classEvent = events.find((e: any) => e.type === 'class');
       const done = events.find((e: any) => e.type === 'done');
 
-      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(cls.id, { username: 'u', password: 'p', id: '1' }, expect.any(Function));
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(cls.id, { username: 'test-user', password: 'test-pass', id: '123' }, expect.any(Function));
       expect(classEvent).toMatchObject({ type: 'class', classId: cls.id, newLectures: [] });
       expect(done).toBeDefined();
     });
@@ -154,7 +160,6 @@ describe('PipelineController', () => {
       mockDetect.detectNewLectures.mockRejectedValueOnce(new Error('Network error'));
 
       const res = await post('/api/classes/sync')
-        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -176,7 +181,6 @@ describe('PipelineController', () => {
       ]);
 
       const res = await post('/api/classes/sync')
-        .send(OPAL_CREDS)
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -201,7 +205,7 @@ describe('PipelineController', () => {
       storage.updateClassMeta(clsB.id, { opalCourseUrl: 'https://opal.example.com/course/b' });
 
       const res = await post('/api/classes/sync')
-        .send({ ...OPAL_CREDS, semester: 'A', year: 2025 })
+        .send({ semester: 'A', year: 2025 })
         .buffer(true)
         .parse((response, callback) => {
           let data = '';
@@ -213,7 +217,7 @@ describe('PipelineController', () => {
       const classEvents = events.filter((e: any) => e.type === 'class');
 
       expect(mockDetect.detectNewLectures).toHaveBeenCalledTimes(1);
-      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(clsA.id, { username: 'u', password: 'p', id: '1' }, expect.any(Function));
+      expect(mockDetect.detectNewLectures).toHaveBeenCalledWith(clsA.id, { username: 'test-user', password: 'test-pass', id: '123' }, expect.any(Function));
       expect(classEvents).toHaveLength(1);
       expect(classEvents[0]).toMatchObject({ classId: clsA.id });
     });

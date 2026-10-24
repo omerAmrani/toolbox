@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { marked } from 'marked';
 import { apiFetch, deleteResource } from '@/lib/api';
 import { streamSSE } from '@/lib/sse';
-import { requireCredentials } from '@/lib/credentials';
+import { useConfigStatus, missingFor } from '@/lib/configStatus';
 import { useToast } from '@/app/components/Toast';
 import { BackendSelect } from '@/app/components/BackendSelect';
 import type { Backend } from '@/app/components/BackendSelect';
@@ -63,6 +63,11 @@ export default function LecturePage() {
   const [activeView, setActiveView] = useState<'summary' | 'transcript'>('summary');
   const [transcript, setTranscript] = useState<string | null>(null);
   const [backend, setBackend] = useState<Backend>('claude');
+  const configStatus = useConfigStatus();
+  const transcribeHint = missingFor(configStatus, 'transcribe');
+  const summarizeHint = missingFor(configStatus, 'summarize');
+  // runSummarize transcribes first when there's no transcript yet.
+  const summarizeNowHint = summarizeHint ?? (lecture?.status === 'pending' ? transcribeHint : null);
   const [jobActive, setJobActive] = useState(false);
   const [currentJobType, setCurrentJobType] = useState<JobType | null>(null);
   const [actionLabel, setActionLabel] = useState('🔄 סכם מחדש');
@@ -193,7 +198,6 @@ export default function LecturePage() {
     setStreaming(false);
     streamBufferRef.current = '';
     try {
-      const creds = await requireCredentials();
       const hasTranscript = await apiFetch(
         `/api/classes/${classId}/lectures/${lectureId}/transcript`,
       ).then((r) => r.ok);
@@ -204,7 +208,7 @@ export default function LecturePage() {
         setActionLabel('⏳ מתמלל...');
         await streamSSE(
           `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-          creds,
+          {},
           (ev) => {
             if (ev.type === 'progress') setActionLabel(`⏳ ${String(ev.message)}`);
             else if (ev.type === 'aborted') throw new Error('aborted');
@@ -220,7 +224,7 @@ export default function LecturePage() {
 
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
-        { backend, ...creds },
+        { backend },
         (ev) => {
           if (ev.type === 'progress') {
             setActionLabel(`⏳ ${String(ev.message)}`);
@@ -259,10 +263,9 @@ export default function LecturePage() {
     setJobActive(true);
     setCurrentJobType('transcribe');
     try {
-      const creds = await requireCredentials();
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
-        creds,
+        {},
         (ev) => {
           if (ev.type === 'progress') setRetranscribeLabel(`⏳ ${String(ev.message)}`);
           else if (ev.type === 'aborted') throw new Error('aborted');
@@ -463,7 +466,7 @@ export default function LecturePage() {
             ) : (
               <div className="summary" style={{ textAlign: 'center', padding: '40px 0' }}>
                 <p style={{ color: 'var(--muted)', marginBottom: 16 }}>אין סיכום עדיין</p>
-                <Button size="md" data-testid="summarize-btn" onClick={runSummarize}>
+                <Button size="md" data-testid="summarize-btn" onClick={runSummarize} disabled={!!summarizeNowHint} title={summarizeNowHint ?? undefined}>
                   ▶ סכם עכשיו
                 </Button>
               </div>
@@ -508,10 +511,10 @@ export default function LecturePage() {
                 מודל AI
               </label>
               <BackendSelect value={backend} onChange={setBackend} full />
-              <Button block onClick={runSummarize} disabled={jobActive}>
+              <Button block onClick={runSummarize} disabled={jobActive || !!summarizeNowHint} title={summarizeNowHint ?? undefined}>
                 {actionLabel}
               </Button>
-              <Button block onClick={runRetranscribe} disabled={jobActive}>
+              <Button block onClick={runRetranscribe} disabled={jobActive || !!transcribeHint} title={transcribeHint ?? undefined}>
                 {retranscribeLabel}
               </Button>
               {jobActive && (

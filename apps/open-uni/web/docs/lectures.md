@@ -24,5 +24,6 @@
 - "תמלול" toggles the pane to the raw `transcript.txt` (lazy-loaded on first switch) and back to the summary on a second click
 - Toolbar row (same line as the picker), icon-only buttons right-to-left: 📋 copy copies whichever content is currently shown (summary or transcript); 🗑 delete removes whichever summary version is currently selected (summary view only) — if that was the latest, the next-newest remaining version becomes latest
 - Re-summarize button with backend picker (`BackendSelect`); re-transcribe re-runs full transcription (no test-mode variant)
+- Buttons are disabled with a hint tooltip when the API's `.env` lacks the keys they need (`lib/configStatus.ts`): re-transcribe needs OPAL + Groq; summarize needs Gemini or Claude, plus OPAL + Groq when the lecture has no transcript yet (it transcribes first)
 
 **Gotcha:** summary streaming uses a buffer ref (`streamBufferRef`) to accumulate tokens before rendering, avoiding excessive re-renders during fast token streams.

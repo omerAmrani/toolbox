@@ -2,7 +2,7 @@ import { Controller, Get, Post, Query, Req, Res, HttpCode, UseGuards } from '@ne
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { AUTH_COOKIE, JwtAuthGuard } from '../../common/jwt-auth.guard';
-import { WEB_ORIGIN, IS_PRODUCTION } from '../../config';
+import { WEB_ORIGIN, IS_PRODUCTION, IS_LOCAL_MODE } from '../../config';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -43,6 +43,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   me(@Req() req: Request, @Res() res: Response) {
     const user = (req as any).user as { sub: string; email: string };
-    res.json({ id: user.sub, email: user.email });
+    res.json({ id: user.sub, email: user.email, local: IS_LOCAL_MODE });
   }
 }

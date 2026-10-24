@@ -7,12 +7,18 @@ import path from 'path';
 import { StorageService } from './modules/storage/storage.service';
 import { getSettings, saveSettings } from '../settings';
 import { DATA_DIR } from './db';
+import { getCredentialsStatus } from './credentials';
 
 const execAsync = promisify(exec);
 
 @Controller('api')
 export class AppController {
   constructor(private readonly storage: StorageService) {}
+
+  @Get('config/status')
+  getConfigStatus(@Res() res: Response) {
+    res.json(getCredentialsStatus());
+  }
 
   @Get('data-dir')
   getDataDir(@Res() res: Response) {

@@ -20,15 +20,15 @@ Lightweight liveness check for the tray app to poll (see `apps/open-uni/docs/loc
 
 ### `/health/gemini` and `/health/claude`
 
-`POST` (not `GET`) — the API key lives client-side only (per-user, encrypted, see `apps/open-uni/web/lib/credentials.ts`) and is never stored server-side, so the caller sends it in the body on each check: `{ apiKey: string }`.
+`POST`, no body — checks the key from the API's `.env` (`GEMINI_API_KEY` / `ANTHROPIC_API_KEY`, see `src/credentials.ts`, docs/adr/0002).
 
 Response: `{ ok: boolean, configured: boolean, ms?: number, response?: string, error?: string }`
 
-- `configured: false` — no `apiKey` in the request body; `ok` will be false
+- `configured: false` — the key isn't set in `.env`; `ok` will be false
 - `configured: true, ok: true` — backend responded successfully
 - `configured: true, ok: false` — key sent but the request failed
 
-There is no `/health/features` endpoint — the old server-side feature-availability check (based on env vars / a shared `settings.json`) was removed along with single-tenant credential storage. Each credential is per-user and client-side now, so "is it configured" is a client-side question (does `localStorage` have a decrypted value), not something the server can answer.
+"Which keys are set" without calling any provider is `GET /api/config/status` → `{ localMode, opal, groq, gemini, claude }` (booleans only, never values) — used by the settings page checklist and to disable transcribe/summarize buttons.
 
 ## Web
 

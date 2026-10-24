@@ -1,13 +1,22 @@
 'use client';
 
-import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import GoogleButton from 'react-google-button';
-import { apiUrl } from '@/lib/api';
+import { apiFetch, apiUrl } from '@/lib/api';
 
 function LoginForm() {
   const params = useSearchParams();
+  const router = useRouter();
   const error = params.get('error');
+
+  // Local mode has no login — /api/auth/me succeeds without a session.
+  useEffect(() => {
+    apiFetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((me) => { if (me?.local) router.replace('/'); })
+      .catch(() => {});
+  }, [router]);
 
   return (
     <div style={{ maxWidth: 380, margin: '120px auto', padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
