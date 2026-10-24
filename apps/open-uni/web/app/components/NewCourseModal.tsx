@@ -182,12 +182,12 @@ export default function NewCourseModal({ open, onClose, onCreated, editTarget }:
         <h2 className="modal__title">{isEdit ? editTarget!.name : 'הוספת קורס'}</h2>
 
         <div className="modal__field">
-          <label>קישור לדף הקורס</label>
+          <label>קישור לדף הקלטות וידאו של הקורס</label>
           <input
             ref={nameRef}
             type="url"
             dir="ltr"
-            placeholder="https://opal.openu.ac.il/course/..."
+            placeholder="https://opal.openu.ac.il/mod/ouilvideocollection/view.php?id=..."
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onBlur={detectFromOpal}

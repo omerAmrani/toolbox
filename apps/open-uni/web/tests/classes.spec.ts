@@ -25,7 +25,7 @@ test.describe('Classes page', () => {
     );
 
     await page.getByTestId('create-class-btn').click();
-    const urlInput = page.getByPlaceholder('https://opal.openu.ac.il/course/...');
+    const urlInput = page.getByPlaceholder('https://opal.openu.ac.il/mod/ouilvideocollection/view.php?id=...');
     await urlInput.fill('https://opal.openu.ac.il/course/e2e-fake');
     await urlInput.blur();
     await page.getByTestId('class-name-input').waitFor({ state: 'visible' });
