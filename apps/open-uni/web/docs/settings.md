@@ -27,6 +27,7 @@ Single-page control panel at `/settings` for managing app configuration, the pro
 
 **Credentials** (read-only — credentials live in `apps/open-uni/api/.env`, see docs/adr/0002):
 - Checklist of OPAL / Groq / Gemini / Claude keys from `GET /api/config/status` (✅/❌, never the values), plus which keys each action needs
+- Groq / Gemini / Claude provider names link to the provider's API-keys page (new tab); hovering shows a `title` hint with the price tier and which `.env` var to paste into
 - No credential form — edit `.env` and restart the API. Transcribe/summarize buttons on the class and lecture pages are disabled with a hint when their keys are missing (`lib/configStatus.ts`)
 
 **AI model health:**

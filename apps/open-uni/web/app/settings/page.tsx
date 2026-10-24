@@ -55,11 +55,20 @@ const MODELS: { key: ModelKey; emoji: string; name: string; sub: string; role: s
 ];
 
 // Read-only: credentials live in the API's .env (docs/adr/0002).
-const ENV_KEYS: { label: string; keys: string; isSet: (s: ConfigStatus) => boolean }[] = [
+const ENV_KEYS: { label: string; keys: string; isSet: (s: ConfigStatus) => boolean; getKey?: { url: string; hint: string } }[] = [
   { label: 'האוניברסיטה הפתוחה', keys: 'OPENU_USERNAME / OPENU_PASSWORD / OPENU_ID', isSet: (s) => s.opal },
-  { label: 'Groq (תמלול)', keys: 'GROQ_API_KEY', isSet: (s) => s.groq },
-  { label: 'Gemini (סיכום)', keys: 'GEMINI_API_KEY', isSet: (s) => s.gemini },
-  { label: 'Claude (סיכום)', keys: 'ANTHROPIC_API_KEY', isSet: (s) => s.claude },
+  {
+    label: 'Groq (תמלול)', keys: 'GROQ_API_KEY', isSet: (s) => s.groq,
+    getKey: { url: 'https://console.groq.com/keys', hint: 'חינמי · צרו מפתח והדביקו ב-GROQ_API_KEY' },
+  },
+  {
+    label: 'Gemini (סיכום)', keys: 'GEMINI_API_KEY', isSet: (s) => s.gemini,
+    getKey: { url: 'https://aistudio.google.com/app/apikey', hint: 'יש מסלול חינמי · התחברו עם Google, צרו מפתח והדביקו ב-GEMINI_API_KEY' },
+  },
+  {
+    label: 'Claude (סיכום)', keys: 'ANTHROPIC_API_KEY', isSet: (s) => s.claude,
+    getKey: { url: 'https://platform.claude.com/settings/keys', hint: 'בתשלום · צרו מפתח והדביקו ב-ANTHROPIC_API_KEY' },
+  },
 ];
 
 export default function SettingsPage() {
@@ -348,12 +357,16 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
-          {ENV_KEYS.map(({ label, keys, isSet }) => {
+          {ENV_KEYS.map(({ label, keys, isSet, getKey }) => {
             const set = configStatus ? isSet(configStatus) : null;
             return (
               <div key={keys} className="cred-field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div className="cred-field__label">{label}</div>
+                  <div className="cred-field__label">
+                    {getKey ? (
+                      <a href={getKey.url} target="_blank" rel="noopener noreferrer" title={getKey.hint}>{label} ↗</a>
+                    ) : label}
+                  </div>
                   <div style={{ font: '0.78rem var(--font-mono)', color: 'var(--muted)' }}>{keys}</div>
                 </div>
                 <span>{set === null ? '—' : set ? '✅' : '❌'}</span>
