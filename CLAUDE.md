@@ -63,3 +63,17 @@ Import as: import { ... } from "@toolbox/ai"
 **Uphold data integrity contracts.** Each app has its own write contract (e.g. DB + filesystem mirror in the API). Any feature that writes data must uphold all sides of that contract — never write to one without the other.
 
 **When to stop and ask.** If a feature touches more than 3 modules, requires a design decision with real trade-offs, or the requirements feel ambiguous — stop and ask before writing code. Rework costs more than a 2-minute clarification.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on omerAmrani/toolbox (via `gh`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
