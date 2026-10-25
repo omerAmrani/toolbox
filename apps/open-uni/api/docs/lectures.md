@@ -37,7 +37,7 @@ There is no `skipped` status — every lecture created (manually or via sync/cro
 - Body: optional `{ backend: 'gemini' | 'claude' }`. Uses the first backend with a key in `.env`: requested → `SUMMARIZE_BACKEND` → gemini → claude. `400` if neither `GEMINI_API_KEY` nor `ANTHROPIC_API_KEY` is set
 
 **SSE event shapes:**
-- `{ type: 'progress', step, message }`
+- `{ type: 'progress', step, message, pct? }` — `pct` (0–99) is set only on ffmpeg download progress during transcribe
 - `{ type: 'token', token }` — streaming token during summarization
 - `{ type: 'done' }`
 - `{ type: 'error' | 'aborted', message }`

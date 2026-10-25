@@ -230,7 +230,7 @@ export class DownloadService {
     jobId: string,
     videoUrl: string,
     groqApiKey: string,
-    onProgress = (_: string) => {},
+    onProgress = (_msg: string, _pct?: number) => {},
     onChunkReady: ((idx: number, chunkText: string) => void) | null = null,
     saveMp3Path: string | null = null,
     maxDurationSecs: number | null = null,
@@ -290,9 +290,9 @@ export class DownloadService {
           proc.kill('SIGKILL');
         }, STALL_TIMEOUT_MS);
         const cur = +timeMatch[1] * 3600 + +timeMatch[2] * 60 + +timeMatch[3];
-        const pct = totalSecs ? Math.min(Math.round((cur / totalSecs) * 100), 99) : '?';
-        const msg = `מוריד: ${pct}% (${this.secsToHMS(cur)}${totalSecs ? ' / ' + this.secsToHMS(totalSecs) : ''})`;
-        onProgress(msg);
+        const pct = totalSecs ? Math.min(Math.round((cur / totalSecs) * 100), 99) : undefined;
+        const msg = `מוריד: ${pct ?? '?'}% (${this.secsToHMS(cur)}${totalSecs ? ' / ' + this.secsToHMS(totalSecs) : ''})`;
+        onProgress(msg, pct);
         process.stdout.write(`\r${msg}  `);
       }
     });

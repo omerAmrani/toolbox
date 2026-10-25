@@ -44,6 +44,8 @@ export default function ClassDetailPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [lectures, setLectures] = useState<Lecture[] | null>(null);
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
+  const [progressMsg, setProgressMsg] = useState<Record<string, string>>({});
+  const [progressPct, setProgressPct] = useState<Record<string, number | undefined>>({});
   const configStatus = useConfigStatus();
   const transcribeHint = missingFor(configStatus, 'transcribe');
   const summarizeHint = missingFor(configStatus, 'summarize');
@@ -129,11 +131,14 @@ export default function ClassDetailPage() {
 
   const runPipeline = async (lectureId: string) => {
     setRunningIds((s) => new Set(s).add(lectureId));
+    setProgressPct((m) => ({ ...m, [lectureId]: undefined }));
     try {
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
         {},
         (ev) => {
+          if (ev.type === 'progress') setProgressMsg((m) => ({ ...m, [lectureId]: String(ev.message) }));
+          if (typeof ev.pct === 'number') setProgressPct((m) => ({ ...m, [lectureId]: ev.pct as number }));
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
         },
@@ -147,6 +152,8 @@ export default function ClassDetailPage() {
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
         {},
         (ev) => {
+          if (ev.type === 'progress') setProgressMsg((m) => ({ ...m, [lectureId]: String(ev.message) }));
+          if (typeof ev.pct === 'number') setProgressPct((m) => ({ ...m, [lectureId]: ev.pct as number }));
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
         },
@@ -168,11 +175,14 @@ export default function ClassDetailPage() {
 
   const runSummarize = async (lectureId: string) => {
     setRunningIds((s) => new Set(s).add(lectureId));
+    setProgressPct((m) => ({ ...m, [lectureId]: undefined }));
     try {
       await streamSSE(
         `/api/classes/${classId}/lectures/${lectureId}/summarize`,
         {},
         (ev) => {
+          if (ev.type === 'progress') setProgressMsg((m) => ({ ...m, [lectureId]: String(ev.message) }));
+          if (typeof ev.pct === 'number') setProgressPct((m) => ({ ...m, [lectureId]: ev.pct as number }));
           if (ev.type === 'aborted') throw new Error('aborted');
           if (ev.type === 'error') throw new Error(String(ev.message));
         },
@@ -256,6 +266,8 @@ export default function ClassDetailPage() {
             const running = runningIds.has(l.id);
             const status = (running && RUNNING_STATUS[l.status]) || l.status;
             const current = IN_FLIGHT.has(status);
+            // Only the download step reports a real %; other steps fall back to the indeterminate bar.
+            const pct = running && status === 'transcribing' ? progressPct[l.id] : undefined;
             return (
               <div
                 key={l.id}
@@ -278,6 +290,11 @@ export default function ClassDetailPage() {
                       <span>{fmtDateLong(l.lectureDate)}</span>
                       <span style={{ opacity: 0.4 }}>·</span>
                       <Status s={status} />
+                      {running && progressMsg[l.id] && (
+                        <span data-testid="lecture-progress-msg" style={{ color: 'var(--muted)' }}>
+                          {progressMsg[l.id]}
+                        </span>
+                      )}
                       {l.lastError && (
                         <>
                           <span style={{ opacity: 0.4 }}>·</span>
@@ -305,7 +322,7 @@ export default function ClassDetailPage() {
                   </div>
                   {current && (
                     <div className="lec-card__progress" data-testid="lecture-progress">
-                      <span />
+                      <span style={pct === undefined ? undefined : { width: `${pct}%`, animation: 'none' }} />
                     </div>
                   )}
                 </article>

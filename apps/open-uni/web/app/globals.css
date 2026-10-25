@@ -1071,6 +1071,7 @@ button.sb__item { border: none; background: none; }
   display: block; height: 100%; width: 35%;
   background: var(--accent);
   animation: indeterminate 1.4s ease-in-out infinite;
+  transition: width 0.4s;
 }
 @keyframes indeterminate {
   from { transform: translateX(-100%); }

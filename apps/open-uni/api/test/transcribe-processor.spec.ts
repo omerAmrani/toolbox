@@ -64,6 +64,19 @@ describe('TranscribeProcessor', () => {
     expect(lecturesService.activeJobs.has('c1/l1')).toBe(false);
   });
 
+  it('forwards download percentage on progress events', async () => {
+    download.downloadAndTranscribe.mockImplementationOnce(async (_id, _url, _key, onProgress) => {
+      onProgress('מוריד: 34% (40:00 / 1:40:00)', 34);
+      return 'Transcript text';
+    });
+    const events: any[] = [];
+    bus.on('event', (e) => events.push(e));
+
+    await processor.run(jobData);
+
+    expect(events).toContainEqual(expect.objectContaining({ type: 'progress', step: 'transcribe', pct: 34 }));
+  });
+
   it('broadcasts error and reverts status to pending when the pipeline throws', async () => {
     download.extractVideoUrl.mockRejectedValueOnce(new Error('Login failed'));
     const events: any[] = [];

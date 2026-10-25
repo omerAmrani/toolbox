@@ -57,7 +57,7 @@ export class TranscribeProcessor {
         randomUUID(),
         videoUrl,
         groqApiKey,
-        (msg: string) => broadcast({ type: 'progress', step: 'transcribe', message: msg }),
+        (msg: string, pct?: number) => broadcast({ type: 'progress', step: 'transcribe', message: msg, pct }),
         null,
         mp3Path,
         maxDurationSecs,

@@ -33,7 +33,7 @@ test.describe('Class detail page', () => {
       route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-        body: 'data: {"type":"progress","message":"Starting"}\n\ndata: {"type":"done","status":"transcribed"}\n\n',
+        body: 'data: {"type":"progress","message":"Starting"}\n\ndata: {"type":"progress","message":"34%","pct":34}\n\ndata: {"type":"done","status":"transcribed"}\n\n',
       }),
     );
     let releaseSummarize = () => {};
@@ -52,6 +52,8 @@ test.describe('Class detail page', () => {
     // Between transcribe and summarize the card must stay busy, not look idle.
     await expect(page.getByTestId('lecture-progress')).toBeVisible();
     await expect(page.getByTestId('run-pipeline-btn')).toHaveCount(0);
+    await expect(page.getByTestId('lecture-progress-msg')).toHaveText('34%');
+    await expect(page.getByTestId('lecture-progress').locator('span')).toHaveAttribute('style', /width: 34%/);
     releaseSummarize();
     await expect(page.getByText('הסיכום הושלם!')).toBeVisible({ timeout: 15_000 });
   });
