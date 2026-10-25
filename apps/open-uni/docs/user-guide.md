@@ -67,7 +67,7 @@ Your courses appear under **הקורסים שלי**, each with how many of its l
 
 ## 4. Process lectures
 
-Open a course to see its lectures. Each one shows a status (**ממתין** = waiting, **מתמלל...** = transcribing, and so on). Click **▶ הפעל** on a lecture to download it, transcribe it, and summarize it.
+Open a course to see its lectures. Each one shows a status (**ממתין** = waiting, **מתמלל...** = transcribing, **סוכם** = summarized, and so on). Click **▶ הפעל** on a lecture to download it, transcribe it, and summarize it.
 
 ![Course](images/03-course.png)
 
