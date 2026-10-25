@@ -5,4 +5,4 @@ open-uni is distributed as a local app that users clone and run themselves, so w
 ## Consequences
 
 - A transcription in flight when the process stops is lost; on boot, lectures stuck in `transcribing` are reset to `pending` with an "interrupted" error so the user can retry.
-- No global concurrency cap — fine for one local user. Bring back a queue (BullMQ/Redis or similar) if the app returns to a shared multi-user server or the API/worker split in `todo-features.md` gets a real driver.
+- No global concurrency cap — fine for one local user. Bring back a queue (BullMQ/Redis or similar) if the app returns to a shared multi-user server or the API/worker split (#9) gets a real driver.

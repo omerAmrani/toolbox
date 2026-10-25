@@ -7,7 +7,7 @@ CRUD for courses. Each class groups lectures and optionally links to an OPAL cou
 - Module: `ClassesModule`
 - Controller: `ClassesController` (`api/classes`)
 
-**Ownership:** every route except `opal-metadata` requires a valid `auth_token` session cookie (Google OAuth + JWT, see `docs/auth.md`). In local mode (no `GOOGLE_CLIENT_ID`) there is no cookie — every request is the fixed `local` user. `POST /api/classes` stamps the class with `req.user.sub` as `userId`; every other route 404s if the logged-in user doesn't own the class (same response as a missing class, so ownership can't be probed). No cookie → 401. Real per-user accounts replaced the earlier anonymous `X-Device-Id` scoping — see `todo-features.md` at the repo root.
+**Ownership:** every route except `opal-metadata` requires a valid `auth_token` session cookie (Google OAuth + JWT, see `docs/auth.md`). In local mode (no `GOOGLE_CLIENT_ID`) there is no cookie — every request is the fixed `local` user. `POST /api/classes` stamps the class with `req.user.sub` as `userId`; every other route 404s if the logged-in user doesn't own the class (same response as a missing class, so ownership can't be probed). No cookie → 401. Real per-user accounts replaced the earlier anonymous `X-Device-Id` scoping — remote/multi-user mode is tracked in #9.
 
 **OPAL credentials:** read from the API's `.env` (`OPENU_USERNAME`/`OPENU_PASSWORD`/`OPENU_ID`, see `src/credentials.ts`, docs/adr/0002). Any route that needs them (`opal-metadata`, `:classId/detect`) returns `400` naming the missing keys if they aren't set.
 
