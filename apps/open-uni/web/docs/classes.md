@@ -24,10 +24,10 @@
 - Lecture number derived from chronological order within the class
 - Per-lecture actions depend on status: summarize, retry (on failure), skip, archive (UI-stub), delete; whole row is clickable → lecture detail
 - "▶ הפעל" (pending) runs transcribe then summarize; it's disabled with a hint tooltip when OPAL/Groq keys are missing, and runs transcribe-only when no Gemini/Claude key is confirmed (`GET /api/config/status`, `lib/configStatus.ts`). "▶ סכם" is disabled when no summarize key is set
-- Lectures in `transcribing / summarizing / processing` are highlighted as current
-- Polls `GET .../lectures` every 5 seconds for lectures not actively running locally
+- A lecture is busy when its status is `transcribing / summarizing` or this tab is running a job for it. Busy lectures are highlighted as current, show a spinning status dot plus an animated progress bar that keeps moving (no percentage), and hide their run actions. While this tab drives the pipeline, the label shows the step it's on (`pending` → מתמלל, `transcribed` → מסכם), because the DB status lags between the transcribe and summarize calls
+- Polls `GET .../lectures` every 5 seconds while any lecture is busy
 - Class header: name, semester+year, code, total/summarized counts, edit (✎) and delete actions
 - Edit (✎) opens `NewCourseModal` with `editTarget` set to the class — all fields (name/code/semester/year/opalCourseUrl) pre-filled and editable, saved via `PATCH /api/classes/:id` on submit
 - Sync now calls the all-classes SSE endpoint (no per-class route yet — backend-attach todo)
 
-**Gotcha:** polling only activates for lectures in `pending` status that have no local SSE job.
+**Gotcha:** the pipeline is driven from the browser (two sequential SSE calls). A refresh between them leaves the lecture at `transcribed` with no summarize started — see `todo-features.md`.

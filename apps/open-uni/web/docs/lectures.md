@@ -10,7 +10,7 @@
 - Split view: main column (tabbed content pane) + sidebar (metadata + actions)
 - Reading progress bar sticky above the content (scroll-tracked)
 - Header: lecture name, date, status pill, reading-time estimate (~200 wpm), prev/next lecture navigation buttons
-- Sidebar: summary details card (summary model, last summarized date), actions card (re-transcribe, re-summarize, delete lecture)
+- Sidebar: summary details card (summary model, last summarized date), actions card (re-transcribe, re-summarize, delete lecture) — a running action shows a spinner next to its live progress message
 - Breadcrumb (in the global `Topbar`) shows course name and the actual lecture name, fetched independently of this page
 
 **Lecture navigation:**

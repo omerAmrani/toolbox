@@ -30,6 +30,8 @@ interface Lecture {
 }
 
 const IN_FLIGHT = new Set(['transcribing', 'summarizing']);
+// While this tab drives the pipeline, show the step it's on — the DB status lags between the two SSE calls.
+const RUNNING_STATUS: Record<string, string> = { pending: 'transcribing', transcribed: 'summarizing' };
 
 export default function ClassDetailPage() {
   const params = useParams<{ classId: string }>();
@@ -83,7 +85,7 @@ export default function ClassDetailPage() {
   useEffect(() => {
     if (!lectures) return;
     const hasInFlight = lectures.some(
-      (l) => IN_FLIGHT.has(l.status) || (l.status === 'pending' && runningIds.has(l.id)),
+      (l) => IN_FLIGHT.has(l.status) || runningIds.has(l.id),
     );
     if (hasInFlight && !pollTimerRef.current) {
       pollTimerRef.current = setInterval(loadLectures, 5000);
@@ -251,8 +253,9 @@ export default function ClassDetailPage() {
       ) : (
         <div className="timeline">
           {orderedLectures.map((l) => {
-            const current = IN_FLIGHT.has(l.status);
-            const showProgress = l.status === 'transcribing' || l.status === 'summarizing';
+            const running = runningIds.has(l.id);
+            const status = (running && RUNNING_STATUS[l.status]) || l.status;
+            const current = IN_FLIGHT.has(status);
             return (
               <div
                 key={l.id}
@@ -274,7 +277,7 @@ export default function ClassDetailPage() {
                     <div className="lec-card__meta">
                       <span>{fmtDateLong(l.lectureDate)}</span>
                       <span style={{ opacity: 0.4 }}>·</span>
-                      <Status s={l.status} />
+                      <Status s={status} />
                       {l.lastError && (
                         <>
                           <span style={{ opacity: 0.4 }}>·</span>
@@ -284,7 +287,7 @@ export default function ClassDetailPage() {
                     </div>
                   </div>
                   <div className="lec-card__actions" onClick={(e) => e.stopPropagation()}>
-                    {l.status === 'pending' && (
+                    {!current && l.status === 'pending' && (
                       <Button
                         data-testid="run-pipeline-btn"
                         onClick={() => runPipeline(l.id)}
@@ -294,15 +297,15 @@ export default function ClassDetailPage() {
                         ▶ הפעל
                       </Button>
                     )}
-                    {l.status === 'transcribed' && (
+                    {!current && l.status === 'transcribed' && (
                       <Button onClick={() => runSummarize(l.id)} disabled={!!summarizeHint} title={summarizeHint ?? 'סכם'}>
                         ▶ סכם
                       </Button>
                     )}
                   </div>
-                  {showProgress && (
-                    <div className="lec-card__progress">
-                      <span style={{ width: l.status === 'summarizing' ? '70%' : '40%' }} />
+                  {current && (
+                    <div className="lec-card__progress" data-testid="lecture-progress">
+                      <span />
                     </div>
                   )}
                 </article>

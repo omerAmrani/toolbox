@@ -1068,9 +1068,30 @@ button.sb__item { border: none; background: none; }
   grid-column: 1 / -1;
 }
 .lec-card__progress span {
-  display: block; height: 100%;
+  display: block; height: 100%; width: 35%;
   background: var(--accent);
-  transition: width 0.4s;
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+@keyframes indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+/* in-flight indicator: status pill + action buttons */
+.spinner,
+.status[data-s="transcribing"] .status__dot,
+.status[data-s="summarizing"] .status__dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  background: transparent;
+  animation: spin 0.8s linear infinite;
+}
+.spinner { margin-inline-end: 6px; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .status__dot, .lec-card__progress span { animation-duration: 3s; }
 }
 
 /* lecture table */

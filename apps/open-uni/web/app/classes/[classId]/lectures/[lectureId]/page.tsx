@@ -46,6 +46,9 @@ interface SummaryHistory {
 
 type JobType = 'transcribe' | 'summarize';
 
+const SUMMARIZE_IDLE = '🔄 סכם מחדש';
+const RETRANSCRIBE_IDLE = '↻ תמלל מחדש';
+
 export default function LecturePage() {
   const params = useParams<{ classId: string; lectureId: string }>();
   const router = useRouter();
@@ -70,8 +73,8 @@ export default function LecturePage() {
   const summarizeNowHint = summarizeHint ?? (lecture?.status === 'pending' ? transcribeHint : null);
   const [jobActive, setJobActive] = useState(false);
   const [currentJobType, setCurrentJobType] = useState<JobType | null>(null);
-  const [actionLabel, setActionLabel] = useState('🔄 סכם מחדש');
-  const [retranscribeLabel, setRetranscribeLabel] = useState('↻ תמלל מחדש');
+  const [actionLabel, setActionLabel] = useState(SUMMARIZE_IDLE);
+  const [retranscribeLabel, setRetranscribeLabel] = useState(RETRANSCRIBE_IDLE);
   const [progressPct, setProgressPct] = useState(0);
   const streamBufferRef = useRef('');
 
@@ -194,7 +197,7 @@ export default function LecturePage() {
 
   const runSummarize = async () => {
     if (jobActive) return;
-    setActionLabel('⏳ מתחיל...');
+    setActionLabel('מתחיל...');
     setStreaming(false);
     streamBufferRef.current = '';
     try {
@@ -205,12 +208,12 @@ export default function LecturePage() {
       if (!hasTranscript) {
         setJobActive(true);
         setCurrentJobType('transcribe');
-        setActionLabel('⏳ מתמלל...');
+        setActionLabel('מתמלל...');
         await streamSSE(
           `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
           {},
           (ev) => {
-            if (ev.type === 'progress') setActionLabel(`⏳ ${String(ev.message)}`);
+            if (ev.type === 'progress') setActionLabel(String(ev.message));
             else if (ev.type === 'aborted') throw new Error('aborted');
             else if (ev.type === 'error') throw new Error(String(ev.message));
           },
@@ -219,7 +222,7 @@ export default function LecturePage() {
 
       setJobActive(true);
       setCurrentJobType('summarize');
-      setActionLabel('⏳ מסכם...');
+      setActionLabel('מסכם...');
       setStreaming(true);
 
       await streamSSE(
@@ -227,7 +230,7 @@ export default function LecturePage() {
         { backend },
         (ev) => {
           if (ev.type === 'progress') {
-            setActionLabel(`⏳ ${String(ev.message)}`);
+            setActionLabel(String(ev.message));
           } else if (ev.type === 'token') {
             streamBufferRef.current += String(ev.token);
             setSummary(streamBufferRef.current);
@@ -251,7 +254,7 @@ export default function LecturePage() {
     } finally {
       setJobActive(false);
       setCurrentJobType(null);
-      setActionLabel('🔄 סכם מחדש');
+      setActionLabel(SUMMARIZE_IDLE);
       setViewedSummaryId(null);
       loadLecture();
       loadHistory();
@@ -267,7 +270,7 @@ export default function LecturePage() {
         `/api/classes/${classId}/lectures/${lectureId}/transcribe`,
         {},
         (ev) => {
-          if (ev.type === 'progress') setRetranscribeLabel(`⏳ ${String(ev.message)}`);
+          if (ev.type === 'progress') setRetranscribeLabel(String(ev.message));
           else if (ev.type === 'aborted') throw new Error('aborted');
           else if (ev.type === 'error') throw new Error(String(ev.message));
         },
@@ -289,7 +292,7 @@ export default function LecturePage() {
     } finally {
       setJobActive(false);
       setCurrentJobType(null);
-      setRetranscribeLabel('↻ תמלל מחדש');
+      setRetranscribeLabel(RETRANSCRIBE_IDLE);
     }
   };
 
@@ -512,9 +515,11 @@ export default function LecturePage() {
               </label>
               <BackendSelect value={backend} onChange={setBackend} full />
               <Button block onClick={runSummarize} disabled={jobActive || !!summarizeNowHint} title={summarizeNowHint ?? undefined}>
+                {actionLabel !== SUMMARIZE_IDLE && <span className="spinner" />}
                 {actionLabel}
               </Button>
               <Button block onClick={runRetranscribe} disabled={jobActive || !!transcribeHint} title={transcribeHint ?? undefined}>
+                {retranscribeLabel !== RETRANSCRIBE_IDLE && <span className="spinner" />}
                 {retranscribeLabel}
               </Button>
               {jobActive && (

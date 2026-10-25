@@ -36,16 +36,23 @@ test.describe('Class detail page', () => {
         body: 'data: {"type":"progress","message":"Starting"}\n\ndata: {"type":"done","status":"transcribed"}\n\n',
       }),
     );
-    await page.route(`**/${lectureId}/summarize`, (route) =>
-      route.fulfill({
+    let releaseSummarize = () => {};
+    const summarizeHeld = new Promise<void>((r) => (releaseSummarize = r));
+    await page.route(`**/${lectureId}/summarize`, async (route) => {
+      await summarizeHeld;
+      await route.fulfill({
         status: 200,
         headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
         body: 'data: {"type":"progress","message":"Summarizing"}\n\ndata: {"type":"done","status":"summarized","summary":"Test summary"}\n\n',
-      }),
-    );
+      });
+    });
 
     await page.goto(`/classes/${classId}`);
     await page.getByTestId('run-pipeline-btn').click();
+    // Between transcribe and summarize the card must stay busy, not look idle.
+    await expect(page.getByTestId('lecture-progress')).toBeVisible();
+    await expect(page.getByTestId('run-pipeline-btn')).toHaveCount(0);
+    releaseSummarize();
     await expect(page.getByText('הסיכום הושלם!')).toBeVisible({ timeout: 15_000 });
   });
 });
