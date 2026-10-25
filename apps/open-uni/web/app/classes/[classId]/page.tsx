@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { apiFetch, deleteResource } from '@/lib/api';
 import { SEMESTER_HE } from '@/lib/status';
 import { streamSSE } from '@/lib/sse';
@@ -50,6 +50,9 @@ export default function ClassDetailPage() {
   const transcribeHint = missingFor(configStatus, 'transcribe');
   const summarizeHint = missingFor(configStatus, 'summarize');
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const searchParams = useSearchParams();
+  const [detecting, setDetecting] = useState(false);
+  const detectStartedRef = useRef(false);
 
   const loadClass = useCallback(async () => {
     try {
@@ -83,6 +86,37 @@ export default function ClassDetailPage() {
     loadClass();
     loadLectures();
   }, [loadClass, loadLectures]);
+
+  const detectNewLectures = useCallback(async () => {
+    setDetecting(true);
+    try {
+      const r = await apiFetch(`/api/classes/${classId}/detect`, { method: 'POST' });
+      const data = await r.json().catch(() => ({}));
+      if (r.status === 429) {
+        showToast("יש עבודה פעילה — הרצאות לא נסרקו, נסה 'בדוק עכשיו' בהגדרות", true);
+        return;
+      }
+      if (!r.ok) {
+        showToast(`הרצאות לא נסרקו: ${data.error || 'שגיאה'}`, true);
+        return;
+      }
+      const n = data.newLectures?.length ?? 0;
+      showToast(n ? `נמצאו ${n} הרצאות` : 'לא נמצאו הרצאות');
+    } catch {
+      showToast('הרצאות לא נסרקו: שגיאת רשת', true);
+    } finally {
+      setDetecting(false);
+      loadLectures();
+    }
+  }, [classId, showToast, loadLectures]);
+
+  // A freshly created course lands here with ?detect=1 — Detect once, then drop the flag so a refresh doesn't repeat it.
+  useEffect(() => {
+    if (!cls || searchParams.get('detect') !== '1' || detectStartedRef.current) return;
+    detectStartedRef.current = true;
+    router.replace(`/classes/${classId}`);
+    if (cls.opalCourseUrl) detectNewLectures();
+  }, [cls, searchParams, router, classId, detectNewLectures]);
 
   useEffect(() => {
     if (!lectures) return;
@@ -231,6 +265,15 @@ export default function ClassDetailPage() {
             <span>{lectures?.length ?? 0} הרצאות</span>
             <span style={{ opacity: 0.4 }}>·</span>
             <span>{summarizedCount} מסוכמות</span>
+            {detecting && (
+              <>
+                <span style={{ opacity: 0.4 }}>·</span>
+                <span data-testid="detecting-msg">
+                  <span className="spinner" />
+                  מחפש הרצאות ב-OPAL…
+                </span>
+              </>
+            )}
           </div>
         </div>
         <div className="detail-h__actions">
@@ -258,7 +301,14 @@ export default function ClassDetailPage() {
         <div style={{ color: 'var(--muted)' }}>טוען...</div>
       ) : orderedLectures.length === 0 ? (
         <div style={{ color: 'var(--muted)', padding: 'var(--gap-lg) 0' }}>
-          אין הרצאות עדיין. נסה לסנכרן את הקורס.
+          {detecting ? (
+            <>
+              <span className="spinner" />
+              מחפש הרצאות ב-OPAL…
+            </>
+          ) : (
+            'אין הרצאות עדיין. נסה לסנכרן את הקורס.'
+          )}
         </div>
       ) : (
         <div className="timeline">

@@ -147,7 +147,7 @@ export default function ClassesPage() {
         onCreated={(id) => {
           setModalOpen(false);
           loadClasses();
-          setTimeout(() => router.push(`/classes/${id}`), 400);
+          setTimeout(() => router.push(`/classes/${id}?detect=1`), 400);
         }}
       />
     </div>

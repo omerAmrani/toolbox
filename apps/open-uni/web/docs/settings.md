@@ -23,7 +23,7 @@ Single-page control panel at `/settings` for managing app configuration, the pro
 - Only shown for classes with `opalCourseUrl` configured
 - List area is capped at 320px with internal scroll to avoid stretching the adjacent settings card
 - There's no separate processing-queue panel — a lecture created here processes the same way as any other `pending` lecture (per-lecture action on the class page)
-- There is no automatic/unattended detection — "בדוק עכשיו" is a manual trigger only
+- No scheduled detection — "בדוק עכשיו" is manual; the only automatic Detect is the one-off run right after creating a course (see `classes.md`)
 
 **Credentials** (read-only — credentials live in `apps/open-uni/api/.env`, see docs/adr/0002):
 - Checklist of OPAL / Groq / Gemini / Claude keys from `GET /api/config/status` (✅/❌, never the values), plus which keys each action needs

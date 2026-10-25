@@ -57,7 +57,7 @@ On OPAL, open the course's video recordings page (**הקלטות וידאו**) a
 
 ![OPAL recordings page](images/opal-recordings.png)
 
-Click **+ הוסף קורס** in the sidebar (or the **קורס חדש** card), paste the URL, and click **צור קורס**. The app finds the course's lectures.
+Click **+ הוסף קורס** in the sidebar (or the **קורס חדש** card), paste the URL, and click **צור קורס**. The app opens the course page and looks for its lectures on OPAL (**מחפש הרצאות ב-OPAL…**). When it finishes, a message tells you how many it found. The lectures are added but not processed yet. If the search can't run, for example because another job is already running, the message says so. You can run it again later with **בדוק עכשיו** in Settings.
 
 ![Add course](images/02-add-course.png)
 
