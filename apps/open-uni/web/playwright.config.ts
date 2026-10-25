@@ -11,7 +11,9 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'NODE_ENV=test WEB_ORIGIN=http://localhost:3002 node dist/src/main.js',
+      // .env.test enables Google login for the API auth specs; e2e runs in local mode (no login).
+      // An empty var survives dotenv, which never overrides what's already set.
+      command: 'GOOGLE_CLIENT_ID= NODE_ENV=test WEB_ORIGIN=http://localhost:3002 node dist/src/main.js',
       cwd: path.resolve(__dirname, '../api'),
       url: 'http://localhost:3001/api/data-dir',
       reuseExistingServer: !process.env.CI,
