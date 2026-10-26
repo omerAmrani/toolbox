@@ -1,0 +1,54 @@
+name: Record traffic
+
+# GitHub keeps only 14 days of traffic data; this archives it daily to the `traffic` branch.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Switch to traffic branch
+        run: |
+          git fetch origin traffic && git checkout traffic || {
+            git checkout --orphan traffic
+            git rm -rfq .
+          }
+
+      - name: Fetch and merge traffic
+        env:
+          # Traffic API needs push access; GITHUB_TOKEN isn't enough. Fine-grained PAT with Administration: read.
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+        run: |
+          repo=${{ github.repository }}
+          today=$(date -u +%F)
+          mkdir -p snapshots
+
+          # Daily series: union by timestamp, newest fetch wins (today's partial count gets updated).
+          for kind in views clones; do
+            [ -f "$kind.json" ] || echo '[]' > "$kind.json"
+            gh api "repos/$repo/traffic/$kind" \
+              | jq --slurpfile old "$kind.json" --arg k "$kind" '($old[0] + .[$k]) | group_by(.timestamp) | map(.[-1])' \
+              > "$kind.tmp" && mv "$kind.tmp" "$kind.json"
+          done
+
+          # Referrers/paths are 14-day aggregates with no dates, so keep a daily snapshot.
+          jq -n --argjson r "$(gh api repos/$repo/traffic/popular/referrers)" \
+                --argjson p "$(gh api repos/$repo/traffic/popular/paths)" \
+                '{referrers: $r, paths: $p}' > "snapshots/$today.json"
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "traffic: $(date -u +%F)"
+          git push origin traffic
