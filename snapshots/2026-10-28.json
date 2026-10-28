@@ -1,0 +1,71 @@
+{
+  "referrers": [
+    {
+      "referrer": "github.com",
+      "count": 6,
+      "uniques": 1
+    }
+  ],
+  "paths": [
+    {
+      "path": "/omerAmrani/toolbox",
+      "title": "Overview",
+      "count": 14,
+      "uniques": 4
+    },
+    {
+      "path": "/omerAmrani/toolbox/graphs/traffic",
+      "title": "/graphs/traffic",
+      "count": 3,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/issues",
+      "title": "/issues",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/pulse",
+      "title": "/pulse",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/tree/traffic",
+      "title": "/tree/traffic",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/actions",
+      "title": "/actions",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/blob/main/apps/open-uni/docs/user-guide.md",
+      "title": "/blob/main/apps/open-uni/docs/user-guide.md",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/blob/traffic/views.json",
+      "title": "/blob/traffic/views.json",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/commits/main",
+      "title": "/commits/main",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/forks",
+      "title": "/forks",
+      "count": 1,
+      "uniques": 1
+    }
+  ]
+}
