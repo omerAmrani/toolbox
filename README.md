@@ -1,5 +1,7 @@
 # Toolbox — open-uni recorder
 
+> **Moved:** open-uni now lives in [omerAmrani/lecture-summarizer](https://github.com/omerAmrani/lecture-summarizer). The copy under `apps/open-uni/` is frozen and will be removed; open new issues and PRs there.
+
 Detects new lectures on the Open University's OPAL platform, downloads and transcribes them, and generates summaries. Runs locally on your machine — no account, no login.
 
 ![My courses](apps/open-uni/docs/images/01-classes.png)
