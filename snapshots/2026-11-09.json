@@ -1,0 +1,71 @@
+{
+  "referrers": [
+    {
+      "referrer": "github.com",
+      "count": 2,
+      "uniques": 1
+    }
+  ],
+  "paths": [
+    {
+      "path": "/omerAmrani/toolbox",
+      "title": "Overview",
+      "count": 4,
+      "uniques": 2
+    },
+    {
+      "path": "/omerAmrani/toolbox/graphs/traffic",
+      "title": "/graphs/traffic",
+      "count": 3,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/pulse",
+      "title": "/pulse",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/tree/traffic",
+      "title": "/tree/traffic",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/blob/traffic/views.json",
+      "title": "/blob/traffic/views.json",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/forks",
+      "title": "/forks",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/graphs/code-frequency",
+      "title": "/graphs/code-frequency",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/network",
+      "title": "/network",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/network/dependencies",
+      "title": "/network/dependencies",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/omerAmrani/toolbox/tree/main",
+      "title": "/tree/main",
+      "count": 1,
+      "uniques": 1
+    }
+  ]
+}
